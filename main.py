@@ -10,21 +10,23 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template_string, send_file
 from dotenv import load_dotenv
 import qrcode
-# ── TEMP PATCH: Supabase vs httpx>=0.25  (удалить, когда supabase-py починят) ──
+# ── TEMP PATCH: supabase-py (≤2.16) vs httpx (≥0.25) ─────────────────────────
 import httpx, functools
 
-for _cls in (httpx.Client, httpx.AsyncClient):
-    orig_init = _cls.__init__
+def _patch(cls):
+    orig_init = cls.__init__            # «замораживаем» ссылку
 
     @functools.wraps(orig_init)
     def _wrap(self, *args, **kw):
-        # supabase-py ≤2.16 передаёт proxy=…
-        if 'proxy' in kw and 'proxies' not in kw:
-            kw['proxies'] = kw.pop('proxy')
+        if "proxy" in kw and "proxies" not in kw:      # меняем ключ
+            kw["proxies"] = kw.pop("proxy")
         return orig_init(self, *args, **kw)
 
-    _cls.__init__ = _wrap
-# ───────────────────────────────────────────────────────────────────────────────
+    cls.__init__ = _wrap
+
+for _c in (httpx.Client, httpx.AsyncClient):
+    _patch(_c)
+# ──────────────────────────────────────────────────────────────────────────────
 from supabase import create_client, Client
 
 # Московское время (UTC+3)
