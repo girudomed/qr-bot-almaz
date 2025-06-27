@@ -3,7 +3,8 @@ qrcode==7.4.2
 Pillow==10.3.0
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
-python-telegram-bot==21.2
+python-telegram-bot==20.7      # ↩︎ был 21.2 (конфликтовал)
+httpx==0.25.2                  # ↩︎ общая версия для PTB 20.7 и supabase 2.3.5
 pyzbar==0.1.9
 supabase==2.3.5
 schedule==1.2.0
