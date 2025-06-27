@@ -1,8 +1,5 @@
 #bot.py
 import os
-# убиваем все прокси,чтобы не было проблем с доступом к Supabase
-for v in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
-    os.environ.pop(v, None)
 import json
 import base64
 import hmac
@@ -12,6 +9,21 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+# ── TEMP PATCH: Supabase vs httpx>=0.25  (удалить, когда supabase-py починят) ──
+import httpx, functools
+
+for _cls in (httpx.Client, httpx.AsyncClient):
+    orig_init = _cls.__init__
+
+    @functools.wraps(orig_init)
+    def _wrap(self, *args, **kw):
+        # supabase-py ≤2.16 передаёт proxy=…
+        if 'proxy' in kw and 'proxies' not in kw:
+            kw['proxies'] = kw.pop('proxy')
+        return orig_init(self, *args, **kw)
+
+    _cls.__init__ = _wrap
+# ───────────────────────────────────────────────────────────────────────────────
 from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
