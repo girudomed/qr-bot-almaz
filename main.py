@@ -1,5 +1,8 @@
 #main.py
 import os
+# убиваем все прокси,чтобы не было проблем с доступом к Supabase
+for v in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+    os.environ.pop(v, None)
 import io
 import time
 import json
@@ -11,10 +14,6 @@ from flask import Flask, request, render_template_string, send_file
 from dotenv import load_dotenv
 import qrcode
 from supabase import create_client, Client
-
-# убиваем все прокси,чтобы не было проблем с доступом к Supabase
-for v in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
-    os.environ.pop(v, None)
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
