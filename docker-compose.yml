@@ -1,28 +1,42 @@
 # docker-compose.yml
+# docker-compose.yml
+version: "3.9"
+
 services:
   qrbot:
     build: .
     container_name: qrbot_almaz
-
-    # host:container — приложение в контейнере слушает 8080,
-    # снаружи будет доступно на http://<SERVER-IP>:5005
-    ports:
-      - "5005:8080"
-
-    # реальные ключи лежат в .env рядом с этим файлом
+    # приложение внутри всё так же слушает 8080
+    expose:                       # заменяет 'ports:' — наружу не торчит
+      - "8080"
     env_file:
       - .env
-
     restart: unless-stopped
-
     logging:
       driver: json-file
       options:
         max-size: "30m"
         max-file: "1"
-
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  caddy:
+    image: caddy:2.8-alpine        # официальная
+    container_name: caddy_reverse_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"                   # HTTP → автоперенаправление на HTTPS
+      - "443:443"                 # HTTPS выдаёт сертификат
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro   # конфиг
+      - caddy_data:/data                       # certmagic storage
+      - caddy_config:/config                   # сессии, OCSP cache
+    depends_on:
+      - qrbot                                # сначала поднимается backend
+
+volumes:
+  caddy_data:
+  caddy_config:
