@@ -4,7 +4,6 @@ Pillow==10.3.0
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 python-telegram-bot==20.3      # ↩︎ был 21.2 (конфликтовал)
-httpx==0.24.1              # ↩︎ общая версия для PTB 20.7 и supabase 2.3.5
 pyzbar==0.1.9
 supabase==2.2.0
 schedule==1.2.0
