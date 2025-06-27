@@ -2,53 +2,98 @@ name: Deploy QR-BOT_ALMAZ
 
 on:
   push:
-    branches: [ main ]          # деплоим всё, что уходит в main
+    branches: [ main ]
+
+# ▸ один деплой за раз
+concurrency:
+  group: deploy-qrbot-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Берём код репозитория
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    # ───────── 1. Код репозитория ─────────
+    - name: Checkout source
+      # 👇 фиксируем конкретную минор-версию
+      uses: actions/checkout@v4.1.2
 
-    # 2. Поднимаем SSH-туннель и деплоим
-    - name: SSH into server and deploy
-      uses: appleboy/ssh-action@v1.0.0
+    # ───────── 2. Подключаемся по SSH и деплоим ─────────
+    - name: Deploy on VPS
+      # 👇 тоже фиксированная версия
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_KEY }}
-        # ╭─────────────────────────────────────── SSH-скрипт ───────────────────────────────────────╮
-        script: |
-          set -e
+        port: ${{ secrets.SERVER_PORT || '22' }}
+        # чтобы смена host-key не роняла билд
+        host_fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
 
-          echo "=== Проверяем наличие проекта на сервере ==="
-          if [ ! -d ~/qr-bot-almaz ]; then
-            echo "Проект не найден — клонируем..."
-            git clone https://github.com/${{ github.repository }} ~/qr-bot-almaz
+        # ──────── shell-скрипт, выполняемый на сервере ────────
+        script: |
+          set -Eeuo pipefail
+
+          PROJECT_DIR="$HOME/qr-bot-almaz"
+          REPO_URL="https://github.com/${{ github.repository }}"
+
+          echo "== Проверяем / клонируем проект =="
+          if [[ ! -d "$PROJECT_DIR/.git" ]]; then
+            git clone "$REPO_URL" "$PROJECT_DIR"
           fi
 
-          cd ~/qr-bot-almaz
+          cd "$PROJECT_DIR"
 
-          echo "=== Обновляем код до latest main ==="
-          git fetch origin
-          git reset --hard origin/main
+          echo "== Обновляем код (без уничтожения локальных правок) =="
+          git fetch origin main --tags
 
-          # НЕ перезаписываем .env, если он уже есть
-          cp -n .env.example .env || true
+          # Есть ли локальные изменения во tracked-файлах?
+          if ! git diff-index --quiet HEAD; then
+            echo "::error::В репозитории есть непушеные изменения! Деплой остановлен."
+            git status -s
+            exit 1
+          fi
 
-          echo "=== Останавливаем предыдущие контейнеры ==="
-          docker compose down || true            # новая CLI 'docker compose', не 'docker-compose'
+          # Fast-forward merge, без reset --hard
+          git merge --ff-only origin/main
 
-          echo "=== Собираем и запускаем свежий образ ==="
-          docker compose build --pull            # тянем обновления базовых образов
+          echo "== Проверяем .env =="
+          if [[ ! -f .env ]]; then
+            echo "::error::.env не найден. Скопируйте его вручную перед деплоем."
+            exit 1
+          fi
+
+          echo "== Останавливаем старый стек =="
+          docker compose down || true
+
+          echo "== Собираем / тянем образы =="
+
+          # ▸ Вариант А. Строим образ прямо на сервере (оставить если так удобнее)
+          docker compose build --pull
+
+          # ▸ Вариант Б. Если образы собираются и публикуются в GHCR / Docker Hub
+          # docker compose pull || true
+
+          echo "== Запускаем контейнеры =="
           docker compose up -d --remove-orphans
 
-          echo "=== Чистим старые dangling-образы и остановленные контейнеры ==="
-          docker image prune -af || true
-          docker container prune -f || true
+          echo "== Post-деплой health-check =="
+          # ждём максимум 30 сек, пока сервис отдаст 200/OK
+          for i in {1..30}; do
+            if curl -sf http://localhost:5005/ >/dev/null; then
+              echo "Service healthy 👌"
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          [[ "${ok:-0}" == "1" ]] || {
+            echo "::error::Контейнер не отвечает на health-check"
+            docker compose ps
+            docker compose logs --tail=100
+            exit 1
+          }
 
-          echo "=== 🚀 Деплой QR-BOT_ALMAZ завершён успешно ==="
-        # ╰───────────────────────────────────────────────────────────────────────────────────────────╯
+          echo "== Чистим старые dangling-образы (не моложе 24 ч) =="
+          docker image prune -af --filter "until=24h" || true
