@@ -1,9 +1,18 @@
+# --- Web ---
 Flask==3.0.3
 qrcode==7.4.2
 Pillow==10.3.0
+
+# --- DB / конфиги ---
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
-python-telegram-bot==20.3      # ↩︎ был 21.2 (конфликтовал)
+
+# --- Telegram bot ---
+python-telegram-bot==20.7          # тянет httpx>=0.25.2 сам
+
+# --- Supabase ---
+supabase>=2.4.4,<3                 # >=2.4 уже совместим с httpx 0.25+
+
+# --- Разное ---
 pyzbar==0.1.9
-supabase==2.2.0
 schedule==1.2.0
