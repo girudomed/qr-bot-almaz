@@ -1,3 +1,4 @@
+#bot.py
 import os
 import json
 import base64
@@ -11,6 +12,10 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
+
+# убиваем все прокси,чтобы не было проблем с доступом к Supabase
+for v in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+    os.environ.pop(v, None)
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
