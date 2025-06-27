@@ -1,6 +1,6 @@
 your-domain.example.com { # Укажите ваш домен
     # Проксируем весь HTTPS-трафик в qrbot:8080
-    :80, :443 {
+    :8081 :8443 {
     reverse_proxy qrbot:8080
 }
 
