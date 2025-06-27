@@ -1,6 +1,8 @@
 your-domain.example.com { # Укажите ваш домен
     # Проксируем весь HTTPS-трафик в qrbot:8080
+    :80, :443 {
     reverse_proxy qrbot:8080
+}
 
     # Настраиваем health-check route, чтобы не писать /health на корне
     @health path /health
