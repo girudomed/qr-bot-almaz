@@ -1,0 +1,37 @@
+version: "3.9"        # 3.9 == 3.8, но новее синтаксисом
+
+services:
+  qrbot:
+    build:
+      context: .
+      dockerfile: Dockerfile    # тот, что мы исправили выше
+    container_name: qrbot_almaz
+
+    # Хост:контейнер — приложение слушает 5000 ВНУТРИ,
+    # снаружи доступно на http://host:5005
+    ports:
+      - "5005:5000"
+
+    # Для локальной разработки том полезен; 
+    # в проде можно убрать, чтобы образ был «immutable»
+    volumes:
+      - .:/app
+
+    env_file:
+      - .env                     # настоящий .env лежит только на сервере
+
+    restart: unless-stopped      # перезапуск при падении, но не при docker stop
+
+    # Ограничиваем рост лог-файла
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "1"
+
+    # Жив ли контейнер? (опционально, если есть /health)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
