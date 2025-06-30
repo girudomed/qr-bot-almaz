@@ -1,12 +1,9 @@
 ################################################################################
-#  HTTP  →  qr.girumed.ru:8081   (проксируем в qrbot:8080)
+#  HTTP  →  qr.girumed.ru:8081   (редиректим в HTTPS)
 ################################################################################
 qr.girumed.ru:8081 {
-	@health path /health
-	respond @health 200
-
-	encode zstd gzip
-	reverse_proxy qrbot:8080
+    # Редиректим весь трафик на HTTPS с сохранением пути и query
+    redir https://qr.girumed.ru:8443{uri}
 }
 
 ################################################################################
@@ -14,11 +11,11 @@ qr.girumed.ru:8081 {
 #  tls internal — самоподписанный сертификат (браузер будет ругаться)
 ################################################################################
 qr.girumed.ru:8443 {
-	tls internal
+    tls internal
 
-	@health path /health
-	respond @health 200
+    @health path /health
+    respond @health 200
 
-	encode zstd gzip
-	reverse_proxy qrbot:8080
+    encode zstd gzip
+    reverse_proxy qrbot:8080
 }
