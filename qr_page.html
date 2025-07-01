@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Сканируйте QR-код</title>
+  <style>
+    /* --- RESET / BASE --------------------------------------------- */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+              background:#111;color:#f0f0f0;overscroll-behavior:none;}
+
+    /* --- LAYOUT ---------------------------------------------------- */
+    .wrap{
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      height:100%;
+      padding:4vh 4vw;
+      text-align:center;
+      gap:4vh;
+    }
+
+    /* --- TYPOGRAPHY ----------------------------------------------- */
+    h1{
+      font-size:3.2rem;
+      line-height:1.1;
+      font-weight:700;
+      letter-spacing:-0.03em;
+    }
+    h2{
+      font-size:1.4rem;
+      font-weight:400;
+      color:#9e9e9e;
+      max-width:20ch;
+      margin-inline:auto;
+    }
+
+    /* --- QR CODE --------------------------------------------------- */
+    .qr-box{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#fff;
+      padding:1rem;
+      border-radius:1rem;
+      box-shadow:0 4px 24px rgba(0,0,0,.4);
+    }
+    .qr-box img{
+      width:60vw;               /* large on tablet portrait */
+      max-width:420px;          /* but not too huge */
+      height:auto;
+    }
+
+    /* --- FOOTER ---------------------------------------------------- */
+    footer{
+      font-size:.9rem;
+      color:#777;
+    }
+
+    /* --- DARK/LIGHT THEME SWITCH (future-proof) -------------------- */
+    @media (prefers-color-scheme:light){
+      body{background:#fafafa;color:#222;}
+      .qr-box{box-shadow:0 4px 20px rgba(0,0,0,.12);}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Сканируйте QR-код</h1>
+    <h2>Поднесите камеру телефона к коду, чтобы отметить приход / уход</h2>
+
+    <div class="qr-box">
+      <!-- Замените src на динамически сгенерированный QR-код -->
+      <img src="qr_placeholder.png" alt="QR code" />
+    </div>
+
+    <footer>
+      &copy; 2025 Your Company · Будьте на связи 🌿
+    </footer>
+  </div>
+</body>
+</html>

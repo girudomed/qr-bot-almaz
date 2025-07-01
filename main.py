@@ -1,4 +1,3 @@
-#main.py
 import os
 import io
 import time
@@ -10,23 +9,6 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template_string, send_file
 from dotenv import load_dotenv
 import qrcode
-# ── TEMP PATCH: supabase-py (≤2.16) vs httpx (≥0.25) ─────────────────────────
-import httpx, functools
-
-def _patch(cls):
-    orig_init = cls.__init__            # «замораживаем» ссылку
-
-    @functools.wraps(orig_init)
-    def _wrap(self, *args, **kw):
-        if "proxy" in kw and "proxies" not in kw:      # меняем ключ
-            kw["proxies"] = kw.pop("proxy")
-        return orig_init(self, *args, **kw)
-
-    cls.__init__ = _wrap
-
-for _c in (httpx.Client, httpx.AsyncClient):
-    _patch(_c)
-# ──────────────────────────────────────────────────────────────────────────────
 from supabase import create_client, Client
 
 # Московское время (UTC+3)
@@ -53,10 +35,6 @@ if not (SUPABASE_URL and SUPABASE_KEY and QR_SECRET):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__)
-
-@app.get("/health")
-def health():
-    return "OK", 200
 
 # Получение списка филиалов из таблицы 'branches' через Supabase API
 def get_branches():
@@ -142,71 +120,187 @@ def qr():
     qr_data = generate_qr_payload(branch_id, branch["name"])
     qr_full = f"/qr_{qr_data}"
 
+    # Получаем все пункты философии из Supabase через API
+    philosophy_points = []
+    try:
+        res = supabase.table("philosophy").select("text").order("id", desc=False).execute()
+        if res.data:
+            philosophy_points = [row["text"] for row in res.data]
+        else:
+            philosophy_points = ["Философия клиники «Гирудомед»: нет данных."]
+    except Exception as e:
+        philosophy_points = ["Философия клиники «Гирудомед»: ошибка загрузки из Supabase."]
+
     # Генерируем картинку QR
     qr_img = qrcode.make(qr_full)
     img_io = io.BytesIO()
     qr_img.save(img_io, 'PNG')
     img_io.seek(0)
 
-    # HTML для отображения QR-кода с автообновлением
+    # HTML для отображения QR-кода с автообновлением и философией
     return render_template_string(
         """
         <!doctype html>
-        <html>
+        <html lang="ru">
         <head>
-            <title>QR-код для {{branch['name']}}</title>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+            <title>QR-код для {{branch['name']}}</title>
             <style>
-                body { font-family: Arial, sans-serif; background: #f4f4f4; text-align: center; padding: 2em; }
-                .container { background:#fff; display:inline-block; padding:2em; border-radius:16px; box-shadow: 0 0 10px #bbb; }
-                .timer { font-size: 18px; color: #007bff; margin: 10px 0; }
+                html,body {
+                    height: 100%;
+                    margin: 0;
+                    padding: 0;
+                    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+                    background: linear-gradient(135deg, #0e1f13 0%, #1a3a24 100%);
+                    color: #eaf7ef;
+                    min-height: 100vh;
+                }
+                body {
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 100vh;
+                }
+                .container {
+                    background: rgba(24, 44, 32, 0.97);
+                    border-radius: 2.2rem;
+                    box-shadow: 0 8px 40px 0 rgba(34, 139, 34, 0.18), 0 1.5px 8px 0 rgba(0,0,0,0.10);
+                    max-width: 420px;
+                    margin: auto;
+                    padding: 2.2rem 1.2rem 1.2rem 1.2rem;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 1.2rem;
+                    min-height: 92vh;
+                    justify-content: center;
+                }
+                .philosophy-title {
+                    font-size: 1.15rem;
+                    font-weight: 700;
+                    color: #b6f5c6;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 0.3rem;
+                    text-shadow: 0 1px 8px #1e4d2b44;
+                }
+                .philosophy-block {
+                    font-size: 1.01em;
+                    font-weight: 500;
+                    line-height: 1.45;
+                    color: #1a3a24;
+                    background: linear-gradient(135deg, #eaf7ef 0%, #b6f5c6 100%);
+                    border: 1.5px solid #4ecb7a;
+                    border-radius: 1.1rem;
+                    margin-bottom: 0.2rem;
+                    padding: 1rem 0.8rem;
+                    min-height: 70px;
+                    width: 100%;
+                    max-width: 340px;
+                    box-sizing: border-box;
+                    box-shadow: 0 2px 12px rgba(76, 203, 122, 0.10);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    hyphens: auto;
+                }
+                h2 {
+                    font-size: 1.13rem;
+                    font-weight: 600;
+                    color: #eaf7ef;
+                    margin: 0.3rem 0 0.5rem 0;
+                    letter-spacing: 0.01em;
+                }
+                .qr-box {
+                    background: #fff;
+                    border-radius: 1.2rem;
+                    box-shadow: 0 2px 16px rgba(34, 139, 34, 0.10);
+                    padding: 0.7rem;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    margin-bottom: 0.2rem;
+                }
+                .qr-box img {
+                    width: 60vw;
+                    max-width: 260px;
+                    min-width: 120px;
+                    height: auto;
+                    display: block;
+                }
+                .timer {
+                    font-size: 1.01rem;
+                    color: #b6f5c6;
+                    margin: 0.5rem 0 0.1rem 0;
+                    letter-spacing: 0.02em;
+                }
                 .expired { color: #dc3545; }
-                img { margin: 1.5em 0; }
+                .back-link {
+                    display: inline-block;
+                    margin-top: 0.7rem;
+                    color: #b6f5c6;
+                    text-decoration: none;
+                    font-weight: 500;
+                    font-size: 1.01rem;
+                    border-bottom: 1px dashed #b6f5c6;
+                    transition: color 0.2s;
+                }
+                .back-link:hover { color: #4ecb7a; border-bottom: 1px solid #4ecb7a; }
+                @media (max-width: 600px) {
+                    .container { padding: 0.7rem 0.2rem; min-height: 99vh; }
+                    .philosophy-block { min-height: 50px; font-size: 0.98em; }
+                    .qr-box img { width: 90vw; max-width: 98vw; }
+                }
             </style>
         </head>
         <body>
             <div class="container">
+                <div class="philosophy-title">Философия клиники «Гирудомед»</div>
+                <div class="philosophy-block" id="philosophy-text"></div>
                 <h2>Филиал: {{branch['name']}}</h2>
-                <div id="qr-container">
-                    <img id="qr-image" src="/qr_image?branch_id={{branch['id']}}&t=" alt="QR-код" width="300"/>
+                <div class="qr-box">
+                    <img id="qr-image" src="/qr_image?branch_id={{branch['id']}}&t=" alt="QR-код" />
                 </div>
                 <div class="timer">
                     <span id="timer">Обновление через: <span id="countdown">30</span> сек</span>
                 </div>
-                <p>QR-код действителен 1 минуту</p>
-                <a href="/">Назад</a>
+                <div style="font-size:0.97rem;color:#b6f5c6;margin-top:0.1rem;">QR-код действителен 1 минуту</div>
+                <a class="back-link" href="/">← Назад к выбору филиала</a>
             </div>
-            
             <script>
+                // Философия из Python
+                const philosophyPoints = {{ philosophy_points|tojson }};
+                let philosophyBlock = document.getElementById('philosophy-text');
+                function getRandomPhilosophy() {
+                    const randomIndex = Math.floor(Math.random() * philosophyPoints.length);
+                    philosophyBlock.textContent = philosophyPoints[randomIndex];
+                }
+                getRandomPhilosophy();
+                setInterval(getRandomPhilosophy, 10000);
+
                 let countdown = 30;
                 let timerElement = document.getElementById('countdown');
                 let qrImage = document.getElementById('qr-image');
                 let branchId = {{branch['id']}};
-                
                 function updateQR() {
-                    // Обновляем QR-код с новым timestamp
                     qrImage.src = '/qr_image?branch_id=' + branchId + '&t=' + Date.now();
                     countdown = 30;
                 }
-                
                 function updateTimer() {
                     timerElement.textContent = countdown;
                     countdown--;
-                    
                     if (countdown < 0) {
                         updateQR();
                     }
                 }
-                
-                // Обновляем таймер каждую секунду
                 setInterval(updateTimer, 1000);
-                
-                // Обновляем QR каждые 30 секунд
                 setInterval(updateQR, 30000);
             </script>
         </body>
         </html>
-        """, branch=branch
+        """, branch=branch, qr_data=qr_data, philosophy_points=philosophy_points
     )
 
 @app.route("/qr_image")

@@ -1,4 +1,3 @@
-#auto_close_scheduler.py
 import os
 import asyncio
 import schedule

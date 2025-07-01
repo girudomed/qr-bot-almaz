@@ -1,4 +1,3 @@
-#bot.py
 import os
 import json
 import base64
@@ -9,24 +8,6 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
-# ── TEMP PATCH: Supabase vs httpx>=0.25  (удалить, когда supabase-py починят) ──
-# ── TEMP PATCH: supabase-py (≤2.16) vs httpx (≥0.25) ─────────────────────────
-import httpx, functools
-
-def _patch(cls):
-    orig_init = cls.__init__            # «замораживаем» ссылку
-
-    @functools.wraps(orig_init)
-    def _wrap(self, *args, **kw):
-        if "proxy" in kw and "proxies" not in kw:      # меняем ключ
-            kw["proxies"] = kw.pop("proxy")
-        return orig_init(self, *args, **kw)
-
-    cls.__init__ = _wrap
-
-for _c in (httpx.Client, httpx.AsyncClient):
-    _patch(_c)
-# ──────────────────────────────────────────────────────────────────────────────
 from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
@@ -110,7 +91,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from telegram import ReplyKeyboardMarkup, KeyboardButton
         keyboard = ReplyKeyboardMarkup([
             ["📊 Моя статистика", "📋 Меню"],
-            ["👑 Админ-панель", "❓ Помощь"]
+            ["👑 Админ-панель", "🐾 Мой тамагочи"],
+            ["❓ Помощь"]
         ], resize_keyboard=True)
         await update.message.reply_text(
             "Вы авторизованы как суперпользователь.",
@@ -123,7 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from telegram import ReplyKeyboardMarkup, KeyboardButton
         keyboard = ReplyKeyboardMarkup([
             ["📊 Моя статистика", "📋 Меню"],
-            ["❓ Помощь"]
+            ["🐾 Мой тамагочи", "❓ Помощь"]
         ], resize_keyboard=True)
         await update.message.reply_text(
             "Вы авторизованы. Можете сканировать QR-коды или использовать меню.",
@@ -499,6 +481,19 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "👑 Админ-панель":
         await handle_admin_panel(update, context)
         return
+    elif text == "🐾 Мой тамагочи":
+        # Показать статус тамагочи
+        tamagotchi_status = await get_tamagotchi_status(user_id)
+        tamagotchi = await update_tamagotchi_stats(user_id)
+        
+        if tamagotchi and not tamagotchi["is_alive"]:
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("💊 Воскресить тамагочи", callback_data="revive_tamagotchi")]
+            ])
+            await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", reply_markup=keyboard, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", parse_mode='Markdown')
+        return
 
     # Проверка авторизации пользователя
     if not await check_user_authorization(user_id):
@@ -557,21 +552,33 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_event_type = await get_last_event_type(user_id)
     
     if last_event_type is None:
-        # Первое событие - только приход
+# Первое событие - только приход
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🟢 Пришел", callback_data="event_arrival")]
+            [
+                InlineKeyboardButton("😞", callback_data="event_arrival_1"),
+                InlineKeyboardButton("😕", callback_data="event_arrival_2"),
+                InlineKeyboardButton("😐", callback_data="event_arrival_3"),
+                InlineKeyboardButton("🙂", callback_data="event_arrival_4"),
+                InlineKeyboardButton("😃", callback_data="event_arrival_5"),
+            ]
         ])
         await update.message.reply_text(
-            f"QR-код филиала '{branch_name}' успешно отсканирован.\nВыберите тип события:",
+            f"Привет, как настроение сегодня?\nQR-код филиала '{branch_name}' успешно отсканирован.",
             reply_markup=keyboard
         )
     elif last_event_type == "departure":
-        # Последнее событие - уход, значит следующее - приход
+# Последнее событие - уход, значит следующее - приход
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🟢 Пришел", callback_data="event_arrival")]
+            [
+                InlineKeyboardButton("😞", callback_data="event_arrival_1"),
+                InlineKeyboardButton("😕", callback_data="event_arrival_2"),
+                InlineKeyboardButton("😐", callback_data="event_arrival_3"),
+                InlineKeyboardButton("🙂", callback_data="event_arrival_4"),
+                InlineKeyboardButton("😃", callback_data="event_arrival_5"),
+            ]
         ])
         await update.message.reply_text(
-            f"QR-код филиала '{branch_name}' успешно отсканирован.\nВыберите тип события:",
+            f"Привет, как настроение сегодня?\nQR-код филиала '{branch_name}' успешно отсканирован.",
             reply_markup=keyboard
         )
     elif last_event_type == "arrival":
@@ -589,10 +596,16 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔴 Ушел", callback_data="event_departure")]
+            [
+                InlineKeyboardButton("😞", callback_data="event_departure_1"),
+                InlineKeyboardButton("😕", callback_data="event_departure_2"),
+                InlineKeyboardButton("😐", callback_data="event_departure_3"),
+                InlineKeyboardButton("🙂", callback_data="event_departure_4"),
+                InlineKeyboardButton("😃", callback_data="event_departure_5"),
+            ]
         ])
         await update.message.reply_text(
-            f"QR-код филиала '{branch_name}' успешно отсканирован.\nВыберите тип события:",
+            f"Как прошел рабочий день, как твое настроение сейчас?\nQR-код филиала '{branch_name}' успешно отсканирован.",
             reply_markup=keyboard
         )
 
@@ -659,6 +672,12 @@ if __name__ == "__main__":
                 arrival_time = datetime.fromisoformat(arrival_time.replace('Z', '+00:00'))
             if isinstance(departure_time, str):
                 departure_time = datetime.fromisoformat(departure_time.replace('Z', '+00:00'))
+            
+            # Убираем timezone info для корректного вычитания
+            if arrival_time.tzinfo is not None:
+                arrival_time = arrival_time.replace(tzinfo=None)
+            if departure_time.tzinfo is not None:
+                departure_time = departure_time.replace(tzinfo=None)
             
             delta = departure_time - arrival_time
             hours = delta.total_seconds() / 3600
@@ -777,9 +796,11 @@ if __name__ == "__main__":
             await query.edit_message_text(report)
             return
 
-        # Обработка событий прихода/ухода
+# Обработка событий прихода/ухода
         if data.startswith("event_"):
-            event_type = data.split("_")[1]  # arrival или departure
+            parts = data.split("_")
+            event_type = parts[1]  # arrival или departure
+            mood = int(parts[2]) if len(parts) > 2 else 3  # 1-5, по умолчанию нейтраль
             
             # Получить сохраненные данные QR
             pending_qr = context.user_data.get('pending_qr')
@@ -787,29 +808,71 @@ if __name__ == "__main__":
                 await query.edit_message_text("Ошибка: данные QR-кода не найдены. Отсканируйте код заново.")
                 return
 
-            # Подготовить данные события
+# Подготовить данные события
             event_data = pending_qr.copy()
             event_data["event_type"] = event_type
+            event_data["mood"] = mood
             
             # Если это уход, рассчитать рабочие часы
             work_hours = None
+            work_duration_text = ""
             if event_type == "departure":
                 last_arrival = await get_last_arrival_event(user_id)
                 if last_arrival:
                     work_hours = await calculate_work_hours(last_arrival["event_time"], event_data["event_time"])
                     event_data["work_hours"] = work_hours
+                    
+                    # Рассчитать точное время пребывания
+                    arrival_time = datetime.fromisoformat(last_arrival["event_time"])
+                    departure_time = datetime.fromisoformat(event_data["event_time"])
+                    
+                    # Убираем timezone info для корректного вычитания
+                    if arrival_time.tzinfo is not None:
+                        arrival_time = arrival_time.replace(tzinfo=None)
+                    if departure_time.tzinfo is not None:
+                        departure_time = departure_time.replace(tzinfo=None)
+                    
+                    duration = departure_time - arrival_time
+                    
+                    hours = int(duration.total_seconds() // 3600)
+                    minutes = int((duration.total_seconds() % 3600) // 60)
+                    work_duration_text = f"\n⏱ Время пребывания: {hours} ч {minutes} мин"
 
             # Сохранить событие в базу
             try:
                 res = supabase.table("time_events").insert(event_data).execute()
                 if res.data:
-                    if event_type == "arrival":
-                        message = f"✅ Приход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} UTC"
-                    else:
-                        hours_text = f"\nОтработано часов: {work_hours}" if work_hours else ""
-                        message = f"✅ Уход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} UTC{hours_text}"
+                    # Покормить тамагочи
+                    tamagotchi, tamagotchi_message = await feed_tamagotchi(user_id)
                     
-                    await query.edit_message_text(message)
+                    # Если тамагочи был мертв, воскресить его
+                    if tamagotchi and not tamagotchi["is_alive"]:
+                        tamagotchi_message = await revive_tamagotchi(user_id)
+                        tamagotchi = await get_or_create_tamagotchi(user_id)
+                    
+                    # Получить случайный комплимент из базы
+                    compliment = "Отличная работа! 👍"
+                    try:
+                        compliment_res = supabase.table("compliments").select("text").execute()
+                        if compliment_res.data:
+                            import random
+                            compliment = random.choice(compliment_res.data)["text"]
+                    except Exception as e:
+                        logging.exception("Ошибка получения комплимента:")
+                    
+                    # Получить статус тамагочи
+                    tamagotchi_status = await get_tamagotchi_status(user_id)
+                    
+                    if event_type == "arrival":
+                        message = f"✅ Приход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК\n\n🐾 **Тамагочи:**\n{tamagotchi_message}\n\n{tamagotchi_status}\n\n{compliment}"
+                    else:
+                        # Получить прогноз погоды для ухода
+                        weather_forecast = await get_weather_forecast()
+                        
+                        hours_text = f"\nОтработано часов: {work_hours}" if work_hours else ""
+                        message = f"✅ Уход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК{work_duration_text}{hours_text}\n\n🐾 **Тамагочи:**\n{tamagotchi_message}\n\n{tamagotchi_status}\n\n{weather_forecast}\n\n{compliment}"
+                    
+                    await query.edit_message_text(message, parse_mode='Markdown')
                     # Очистить сохраненные данные
                     context.user_data.pop('pending_qr', None)
                 else:
@@ -868,6 +931,13 @@ if __name__ == "__main__":
             elif action == "decline":
                 user_id = int(parts[2])
                 await decline_user(query, context, user_id)
+            return
+
+        # Обработка воскрешения тамагочи
+        if data == "revive_tamagotchi":
+            message = await revive_tamagotchi(user_id)
+            tamagotchi_status = await get_tamagotchi_status(user_id)
+            await query.edit_message_text(f"🐾 **Мой тамагочи:**\n\n{message}\n\n{tamagotchi_status}", parse_mode='Markdown')
             return
 
         # Обработка заявок на регистрацию (только для админа)
@@ -1369,6 +1439,284 @@ if __name__ == "__main__":
         except Exception as e:
             logging.exception("Ошибка LIVE Dashboard:")
             await query.edit_message_text("Ошибка загрузки LIVE Dashboard. Попробуйте еще раз.")
+
+    # Функции тамагочи
+    async def get_or_create_tamagotchi(user_id):
+        """Получить или создать тамагочи для пользователя"""
+        try:
+            result = supabase.table("tamagotchi").select("*").eq("telegram_id", user_id).execute()
+            if result.data:
+                return result.data[0]
+            else:
+                # Создать нового тамагочи
+                new_tamagotchi = {
+                    "telegram_id": user_id,
+                    "name": "Тамагочи",
+                    "hunger": 100,
+                    "happiness": 100,
+                    "health": 100,
+                    "level": 1,
+                    "experience": 0,
+                    "is_alive": True,
+                    "last_fed": get_moscow_time().isoformat()
+                }
+                create_result = supabase.table("tamagotchi").insert(new_tamagotchi).execute()
+                return create_result.data[0] if create_result.data else new_tamagotchi
+        except Exception as e:
+            logging.exception("Ошибка получения тамагочи:")
+            return None
+
+    async def update_tamagotchi_stats(user_id):
+        """Обновить статистику тамагочи на основе времени"""
+        try:
+            tamagotchi = await get_or_create_tamagotchi(user_id)
+            if not tamagotchi:
+                return None
+            
+            # Рассчитать время с последнего кормления
+            last_fed = datetime.fromisoformat(tamagotchi["last_fed"])
+            if last_fed.tzinfo is not None:
+                last_fed = last_fed.replace(tzinfo=None)
+            
+            now = get_moscow_time().replace(tzinfo=None)
+            hours_since_fed = (now - last_fed).total_seconds() / 3600
+            
+            # Обновить показатели
+            hunger = max(0, tamagotchi["hunger"] - int(hours_since_fed * 5))  # -5 за час
+            happiness = max(0, tamagotchi["happiness"] - int(hours_since_fed * 3))  # -3 за час
+            health = max(0, tamagotchi["health"] - int(hours_since_fed * 2))  # -2 за час
+            
+            # Проверить смерть (3 дня без кормления = 72 часа)
+            is_alive = hours_since_fed < 72
+            
+            # Обновить в базе
+            updated_data = {
+                "hunger": hunger,
+                "happiness": happiness,
+                "health": health,
+                "is_alive": is_alive,
+                "updated_at": now.isoformat()
+            }
+            
+            supabase.table("tamagotchi").update(updated_data).eq("telegram_id", user_id).execute()
+            
+            # Вернуть обновленные данные
+            tamagotchi.update(updated_data)
+            return tamagotchi
+            
+        except Exception as e:
+            logging.exception("Ошибка обновления тамагочи:")
+            return None
+
+    async def feed_tamagotchi(user_id):
+        """Покормить тамагочи (при сканировании QR)"""
+        try:
+            tamagotchi = await update_tamagotchi_stats(user_id)
+            if not tamagotchi:
+                return None, None
+            
+            # Если мертв, не кормим
+            if not tamagotchi["is_alive"]:
+                return tamagotchi, await get_tamagotchi_message("dead")
+            
+            # Покормить
+            new_hunger = min(100, tamagotchi["hunger"] + 25)
+            new_happiness = min(100, tamagotchi["happiness"] + 20)
+            new_health = min(100, tamagotchi["health"] + 15)
+            new_experience = tamagotchi["experience"] + 10
+            
+            # Проверить повышение уровня
+            new_level = tamagotchi["level"]
+            if new_experience >= new_level * 100:
+                new_level += 1
+                new_experience = 0
+            
+            # Обновить в базе
+            updated_data = {
+                "hunger": new_hunger,
+                "happiness": new_happiness,
+                "health": new_health,
+                "experience": new_experience,
+                "level": new_level,
+                "last_fed": get_moscow_time().isoformat(),
+                "updated_at": get_moscow_time().isoformat()
+            }
+            
+            supabase.table("tamagotchi").update(updated_data).eq("telegram_id", user_id).execute()
+            
+            # Обновить локальные данные
+            tamagotchi.update(updated_data)
+            
+            # Получить сообщение
+            if new_level > tamagotchi["level"]:
+                message = await get_tamagotchi_message("happy")
+            else:
+                message = await get_tamagotchi_message("feed")
+            
+            return tamagotchi, message
+            
+        except Exception as e:
+            logging.exception("Ошибка кормления тамагочи:")
+            return None, None
+
+    async def get_tamagotchi_message(message_type):
+        """Получить случайное сообщение тамагочи"""
+        try:
+            result = supabase.table("tamagotchi_messages").select("*").eq("message_type", message_type).execute()
+            if result.data:
+                import random
+                message_data = random.choice(result.data)
+                return f"{message_data['emoji']} {message_data['message']}"
+            return "🐾 Тамагочи что-то говорит..."
+        except Exception as e:
+            logging.exception("Ошибка получения сообщения тамагочи:")
+            return "🐾 Тамагочи молчит..."
+
+    async def get_tamagotchi_status(user_id):
+        """Получить статус тамагочи для отображения"""
+        try:
+            tamagotchi = await update_tamagotchi_stats(user_id)
+            if not tamagotchi:
+                return "🐾 Тамагочи не найден"
+            
+            if not tamagotchi["is_alive"]:
+                return f"💀 {tamagotchi['name']} (Уровень {tamagotchi['level']}) - МЕРТВ\n⚰️ Воскреси меня сканированием QR!"
+            
+            # Определить состояние
+            hunger = tamagotchi["hunger"]
+            happiness = tamagotchi["happiness"]
+            health = tamagotchi["health"]
+            
+            status_emoji = "😄"
+            if hunger < 30 or happiness < 30 or health < 30:
+                status_emoji = "😰"
+            elif hunger < 50 or happiness < 50 or health < 50:
+                status_emoji = "😐"
+            
+            status_text = f"""
+{status_emoji} **{tamagotchi['name']}** (Уровень {tamagotchi['level']})
+🍎 Сытость: {hunger}/100
+😊 Счастье: {happiness}/100
+❤️ Здоровье: {health}/100
+⭐ Опыт: {tamagotchi['experience']}/{tamagotchi['level'] * 100}
+            """.strip()
+            
+            return status_text
+            
+        except Exception as e:
+            logging.exception("Ошибка получения статуса тамагочи:")
+            return "🐾 Ошибка получения статуса тамагочи"
+
+    async def revive_tamagotchi(user_id):
+        """Воскресить тамагочи"""
+        try:
+            updated_data = {
+                "hunger": 50,
+                "happiness": 50,
+                "health": 50,
+                "is_alive": True,
+                "last_fed": get_moscow_time().isoformat(),
+                "updated_at": get_moscow_time().isoformat()
+            }
+            
+            supabase.table("tamagotchi").update(updated_data).eq("telegram_id", user_id).execute()
+            message = await get_tamagotchi_message("revive")
+            return message
+            
+        except Exception as e:
+            logging.exception("Ошибка воскрешения тамагочи:")
+            return "🐾 Ошибка воскрешения"
+
+    async def get_weather_forecast():
+        """Получить прогноз погоды на завтра для Казани"""
+        try:
+            import aiohttp
+            import asyncio
+            from datetime import datetime, timedelta
+            
+            # --- OpenWeatherMap ---------------------------------
+            api_key = os.getenv("OPENWEATHER_API_KEY") or ""
+            city = "Kazan,RU"
+
+            # Если ключ не указан, сразу сообщаем о недоступности сервиса
+            if not api_key:
+                tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m')
+                return f"🌤 Прогноз погоды на {tomorrow}: сервис недоступен (нет API-ключа)"
+            
+            async with aiohttp.ClientSession() as session:
+                # Получаем прогноз на завтра
+                url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={api_key}&units=metric&lang=ru"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Найти данные на завтра
+                        tomorrow = datetime.now() + timedelta(days=1)
+                        tomorrow_date = tomorrow.strftime('%Y-%m-%d')
+                        
+                        tomorrow_forecasts = []
+                        for item in data['list']:
+                            if tomorrow_date in item['dt_txt']:
+                                tomorrow_forecasts.append(item)
+                        
+                        if tomorrow_forecasts:
+                            # Анализ данных
+                            temps = [item['main']['temp'] for item in tomorrow_forecasts]
+                            feels_like = [item['main']['feels_like'] for item in tomorrow_forecasts]
+                            rain_periods = []
+                            
+                            for item in tomorrow_forecasts:
+                                if 'rain' in item or item['weather'][0]['main'] in ['Rain', 'Drizzle']:
+                                    time_str = item['dt_txt'].split(' ')[1][:5]
+                                    rain_periods.append(time_str)
+                            
+                            min_temp = int(min(temps))
+                            max_temp = int(max(temps))
+                            avg_feels = int(sum(feels_like) / len(feels_like))
+                            
+                            # --- второй запрос для восхода/заката ---
+                            try:
+                                lat = data["city"]["coord"]["lat"]
+                                lon = data["city"]["coord"]["lon"]
+                                oc_url = f"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&exclude=hourly,minutely,current,alerts&appid={api_key}"
+                                async with session.get(oc_url) as resp2:
+                                    if resp2.status == 200:
+                                        oc = await resp2.json()
+                                        tz_offset = oc.get("timezone_offset", 0)
+                                        daily = oc.get("daily", [])
+                                        if len(daily) > 1:
+                                            sr_ts = daily[1]["sunrise"] + tz_offset
+                                            ss_ts = daily[1]["sunset"] + tz_offset
+                                            sunrise = datetime.utcfromtimestamp(sr_ts).strftime("%H:%M")
+                                            sunset  = datetime.utcfromtimestamp(ss_ts).strftime("%H:%M")
+                                        else:
+                                            sunrise = sunset = "--"
+                                    else:
+                                        sunrise = sunset = "--"
+                            except Exception:
+                                sunrise = sunset = "--"
+                            
+                            rain_text = "без осадков"
+                            if rain_periods:
+                                rain_text = f"возможны с {rain_periods[0]} до {rain_periods[-1]}"
+                            
+                            return f"""
+🌤 **Прогноз погоды на завтра ({tomorrow.strftime('%d.%m')})**
+🌡 Температура: {min_temp}°C...{max_temp}°C
+🌡 Ощущается как: {avg_feels}°C
+🌧 Осадки: {rain_text}
+🌅 Восход: {sunrise}
+🌇 Закат: {sunset}
+
+*Данные предоставлены OpenWeatherMap*
+                            """.strip()
+                        
+        except Exception as e:
+            logging.exception("Ошибка получения прогноза погоды:")
+
+        # Падёжный fallback при недоступности сервиса
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m')
+        return f"🌤 Прогноз погоды на {tomorrow}: сервис временно недоступен"
 
     app.add_handler(MessageHandler(filters.CONTACT, contact_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_qr))
