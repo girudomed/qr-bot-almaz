@@ -54,6 +54,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__)
 
+@app.route('/health')
+def health():
+    return "200", 200
+
 # Получение списка филиалов из таблицы 'branches' через Supabase API
 def get_branches():
     try:
