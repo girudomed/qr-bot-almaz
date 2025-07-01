@@ -22,20 +22,6 @@ services:
       timeout: 5s
       retries: 3
 
-  caddy:
-    image: caddy:2.8-alpine        # официальная
-    container_name: caddy_reverse_proxy
-    restart: unless-stopped
-    ports:
-      - "8081:8081"                   # HTTP → автоперенаправление на HTTPS
-      - "8443:8443"                 # HTTPS выдаёт сертификат
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro   # конфиг
-      - caddy_data:/data                       # certmagic storage
-      - caddy_config:/config                   # сессии, OCSP cache
-    depends_on:
-      - qrbot                                # сначала поднимается backend
-
 volumes:
   caddy_data:
   caddy_config:
