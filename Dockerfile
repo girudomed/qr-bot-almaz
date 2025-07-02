@@ -34,7 +34,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
         supabase==1.0.3 \
         gotrue==1.3.1 \
-        postgrest==0.14.1 \
         realtime==1.0.2 \
         storage3==0.7.0 \
         --no-deps && \

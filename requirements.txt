@@ -13,8 +13,6 @@ python-dotenv==1.0.1
 # --- Telegram bot ---
 python-telegram-bot==20.7         # тянет httpx>=0.25.2 сам
 
-# —–– Supabase 1.x, где ещё есть аргумент proxy —––
-
 # --- Разное ---
 pyzbar==0.1.9
 schedule==1.2.0
