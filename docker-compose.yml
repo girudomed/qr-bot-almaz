@@ -1,58 +1,49 @@
-# docker-compose.yml ─ QR-bot стэк
-# Compose v2 → секция `version:` больше не нужна.
+# QR-bot stack — Compose v2 (version: не нужен)
 
-# ── Сети ────────────────────────────────────────────────────────────────
+# ── Сети ───────────────────────────────────────────────────────────────
 networks:
-  qr_net:                        # внутренняя сеть всех наших сервисов
-    driver: bridge
-  caddy_net:                     # внешняя сеть-прокси (создаёт Caddy-stack)
-    external: true
+  qr_net: {}                       # bridge по-умолчанию
+  caddy_net:
+    external: true                 # создаёт Caddy-стек
 
-# ── Якорь с единой сборкой образа ───────────────────────────────────────
+# ── Якорь без build (общие параметры) ──────────────────────────────────
 x-qr-image: &qr_image
-  build:
-    context: .                   # собираем из текущей папки
-  image: qr-bot-almaz:latest     # тег reuse → остальные сервисы его берут
-  env_file: [.env]               # все используют один .env
+  image: qr-bot-almaz:latest       # образ, который соберёт web
+  env_file: [.env]
   restart: unless-stopped
-  networks: [qr_net]             # по умолчанию только внутренняя сеть
+  networks: [qr_net]
 
-# ── Сервисы ─────────────────────────────────────────────────────────────
+# ── Сервисы ────────────────────────────────────────────────────────────
 services:
-  ## ---------- WEB (Flask+Gunicorn) ------------------------------------
+  # ---------- WEB (Flask + Gunicorn) -----------------------------------
   web:
     <<: *qr_image
-    container_name: qrbot_web
+    build: .                       # ← build теперь только здесь!
     command: >
       gunicorn -w 2 -k gthread -t 30 -b 0.0.0.0:8080 web.main:app
-    expose: ["8080"]             # наружу не публикуем — только для Caddy
+    expose: ["8080"]               # порт доступен лишь внутри сетей
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-    networks:                    # + прокси-сеть, чтобы Caddy резолвил «web»
+    networks:                      # + прокси-сеть для Caddy
       - qr_net
       - caddy_net
-    # если нужно запускать Caddy раньше web, раскомментируй ↓
-    # depends_on:
-    #   caddy_reverse_proxy:
-    #     condition: service_started
+    # если Caddy обращается к web по имени контейнера — раскомментируйте:
+    # container_name: qrbot_web
 
-  ## ---------- BOT (Telegram-бот) --------------------------------------
+  # ---------- BOT (Telegram-бот) --------------------------------------
   bot:
     <<: *qr_image
-    container_name: qrbot_bot
     command: python -u bot/bot.py
 
-  ## ---------- TAMAGOTCHI scheduler ------------------------------------
+  # ---------- TAMAGOTCHI scheduler -------------------------------------
   tamagotchi_scheduler:
     <<: *qr_image
-    container_name: qrbot_tamagotchi
     command: python -u schedulers/tamagotchi_scheduler.py
 
-  ## ---------- AUTO-CLOSE scheduler ------------------------------------
+  # ---------- AUTO-CLOSE scheduler -------------------------------------
   auto_close_scheduler:
     <<: *qr_image
-    container_name: qrbot_autoclose
     command: python -u schedulers/auto_close_scheduler.py

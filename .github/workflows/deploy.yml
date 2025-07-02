@@ -53,7 +53,6 @@ jobs:
           docker compose down || true
 
           echo "== Обновляем base-images и пересобираем web =="
-          # Caddy стягивается pull'ом, qr-bot собираем локально
           docker compose build web --pull
 
           echo "== Запускаем контейнеры =="
