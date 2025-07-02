@@ -39,6 +39,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         storage3==0.7.0 \
         deprecation==2.1.0 \
         python-dateutil==2.9.0.post0 \
+        six==1.16.0 \
+        backoff==2.2.1 \
         --no-deps && \
     # --- clean ---
     apt-get purge -y --auto-remove build-essential && \
