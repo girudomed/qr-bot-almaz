@@ -2,7 +2,7 @@
 Flask==3.0.3
 qrcode==7.4.2
 Pillow==10.3.0
-httpx==0.23.3
+httpx==0.25.2
 fastapi==0.111.0
 
 # --- DB / конфиги ---
@@ -10,10 +10,11 @@ psycopg2-binary==2.9.9
 python-dotenv==1.0.1
 
 # --- Telegram bot ---
-python-telegram-bot==20.3          # тянет httpx>=0.25.2 сам
+python-telegram-bot==20.9         # тянет httpx>=0.25.2 сам
 
 # —–– Supabase 1.x, где ещё есть аргумент proxy —––
-supabase==1.0.3                  # строго фиксируем
+supabase==2.16.0                  # строго фиксируем
+gotrue
 
 # --- Разное ---
 pyzbar==0.1.9
