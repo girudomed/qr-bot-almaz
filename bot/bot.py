@@ -26,9 +26,7 @@ def get_moscow_timestamp():
     """Получить timestamp московского времени"""
     return int(get_moscow_time().timestamp())
 
-# Загрузка переменных окружения
-if Path('.env').is_file():
-    load_dotenv()      # локальная разработка
+load_dotenv()
 
 # Настройки логирования
 logging.basicConfig(
@@ -155,8 +153,8 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Вы уже отправили заявку или зарегистрированы.")
         return
 
-    # Регистрируем пользователя с телефоном
-    supabase.table("users").insert({
+    # Сохранить данные телефона в контексте и запросить ФИО
+    context.user_data['registration_data'] = {
         "telegram_id": user_id,
         "first_name": first_name,
         "last_name": last_name,
@@ -165,38 +163,211 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "chat_id": chat_id,
         "status": "pending",
         "role": "user"
-    }).execute()
+    }
+    
+    # Установить состояние ожидания ФИО
+    context.user_data['waiting_for_full_name'] = True
+    
+    from telegram import ReplyKeyboardRemove
+    await update.message.reply_text(
+        "📝 **Регистрация - Шаг 2 из 3**\n\n"
+        "Теперь введите ваше полное ФИО (Фамилия Имя Отчество):\n\n"
+        "Пример: Иванов Иван Иванович",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode='Markdown'
+    )
 
-    # Найти chat_id админа (по username)
-    admin_query = supabase.table("users").select("*").eq("username", ADMIN_USERNAME).execute()
-    admin = admin_query.data[0] if admin_query.data and len(admin_query.data) > 0 else None
-    admin_chat_id = admin["chat_id"] if admin and admin.get("chat_id") else None
-
-    # Кнопки для подтверждения/отклонения
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Принять", callback_data=f"approve_{user_id}"),
-            InlineKeyboardButton("❌ Отклонить", callback_data=f"decline_{user_id}")
-        ]
-    ])
-    if admin_chat_id and admin_chat_id != 0:
-        await context.bot.send_message(
-            chat_id=admin_chat_id,
-            text=f"Запрос на регистрацию:\n"
-                 f"Имя: {first_name}\n"
-                 f"Фамилия: {last_name}\n"
-                 f"Username: @{username}\n"
-                 f"Телефон: {phone}\n"
-                 f"Telegram ID: {user_id}\n"
-                 f"chat_id: {chat_id}",
-            reply_markup=keyboard
-        )
-        await update.message.reply_text("Ваша заявка на регистрацию отправлена администратору. Ожидайте подтверждения.")
-    else:
+async def handle_full_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """Обработка ввода ФИО"""
+    try:
+        # Проверка формата ФИО (минимум 2 слова)
+        name_parts = text.strip().split()
+        if len(name_parts) < 2:
+            await update.message.reply_text(
+                "❌ Пожалуйста, введите полное ФИО (минимум Фамилия и Имя).\n\n"
+                "Пример: Иванов Иван Иванович"
+            )
+            return
+        
+        # Проверка на корректность (только буквы, дефисы и пробелы)
+        import re
+        if not re.match(r'^[а-яёА-ЯЁa-zA-Z\s\-]+$', text.strip()):
+            await update.message.reply_text(
+                "❌ ФИО должно содержать только буквы, пробелы и дефисы.\n\n"
+                "Пожалуйста, введите корректное ФИО:"
+            )
+            return
+        
+        # Сохранить ФИО и запросить дату рождения
+        context.user_data['registration_data']['full_name'] = text.strip()
+        context.user_data.pop('waiting_for_full_name', None)
+        context.user_data['waiting_for_birth_date'] = True
+        
         await update.message.reply_text(
-            "Ваша заявка на регистрацию создана, но администратор ещё не активировал бота. "
-            "Попросите администратора (username: gayazking) запустить /start в этом боте для получения заявок."
+            "📅 **Регистрация - Шаг 3 из 3**\n\n"
+            "Введите вашу дату рождения в формате ДД.ММ.ГГГГ:\n\n"
+            "Пример: 15.03.1990",
+            parse_mode='Markdown'
         )
+        
+    except Exception as e:
+        logging.exception("Ошибка обработки ФИО:")
+        await update.message.reply_text("❌ Ошибка обработки данных. Попробуйте еще раз.")
+
+async def handle_birth_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """Обработка ввода даты рождения"""
+    try:
+        # Проверка формата даты
+        import re
+        from datetime import datetime, date
+        
+        date_pattern = r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$'
+        match = re.match(date_pattern, text.strip())
+        
+        if not match:
+            await update.message.reply_text(
+                "❌ Неверный формат даты. Используйте формат ДД.ММ.ГГГГ\n\n"
+                "Пример: 15.03.1990"
+            )
+            return
+        
+        day, month, year = map(int, match.groups())
+        
+        # Проверка корректности даты
+        try:
+            birth_date = date(year, month, day)
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Некорректная дата. Проверьте правильность введенной даты.\n\n"
+                "Пример: 15.03.1990"
+            )
+            return
+        
+        # Проверка возраста (должен быть от 14 до 100 лет)
+        today = date.today()
+        age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+        
+        if age < 14:
+            await update.message.reply_text(
+                "❌ Возраст должен быть не менее 14 лет."
+            )
+            return
+        
+        if age > 100:
+            await update.message.reply_text(
+                "❌ Проверьте правильность введенной даты рождения."
+            )
+            return
+        
+        # Сохранить дату рождения и показать подтверждение
+        context.user_data['registration_data']['birth_date'] = birth_date.isoformat()
+        context.user_data.pop('waiting_for_birth_date', None)
+        
+        # Показать данные для подтверждения
+        reg_data = context.user_data['registration_data']
+        confirmation_text = f"""
+✅ **Проверьте введенные данные:**
+
+👤 **ФИО:** {reg_data['full_name']}
+📅 **Дата рождения:** {text.strip()}
+📱 **Телефон:** {reg_data['phone']}
+🆔 **Username:** @{reg_data['username']}
+
+Все данные указаны верно?
+        """
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Все верно", callback_data="confirm_registration"),
+                InlineKeyboardButton("❌ Есть ошибки", callback_data="restart_registration")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            confirmation_text,
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logging.exception("Ошибка обработки даты рождения:")
+        await update.message.reply_text("❌ Ошибка обработки данных. Попробуйте еще раз.")
+
+async def handle_registration_confirmation(query, context):
+    """Обработка подтверждения регистрации"""
+    try:
+        reg_data = context.user_data.get('registration_data')
+        if not reg_data:
+            await query.edit_message_text("❌ Данные регистрации не найдены. Начните регистрацию заново.")
+            return
+        
+        # Сохранить пользователя в базу данных
+        supabase.table("users").insert(reg_data).execute()
+        
+        # Найти chat_id админа (по username)
+        admin_query = supabase.table("users").select("*").eq("username", ADMIN_USERNAME).execute()
+        admin = admin_query.data[0] if admin_query.data and len(admin_query.data) > 0 else None
+        admin_chat_id = admin["chat_id"] if admin and admin.get("chat_id") else None
+
+        # Кнопки для подтверждения/отклонения
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Принять", callback_data=f"approve_{reg_data['telegram_id']}"),
+                InlineKeyboardButton("❌ Отклонить", callback_data=f"decline_{reg_data['telegram_id']}")
+            ]
+        ])
+        
+        if admin_chat_id and admin_chat_id != 0:
+            await context.bot.send_message(
+                chat_id=admin_chat_id,
+                text=f"""📋 **Новая заявка на регистрацию:**
+
+👤 **ФИО:** {reg_data['full_name']}
+📅 **Дата рождения:** {reg_data['birth_date']}
+📱 **Телефон:** {reg_data['phone']}
+🆔 **Username:** @{reg_data['username']}
+📝 **Telegram ID:** {reg_data['telegram_id']}
+💬 **Chat ID:** {reg_data['chat_id']}""",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            
+            await query.edit_message_text(
+                "✅ **Регистрация завершена!**\n\n"
+                "Ваша заявка отправлена администратору. Ожидайте подтверждения.",
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text(
+                "✅ **Регистрация завершена!**\n\n"
+                "Ваша заявка создана, но администратор ещё не активировал бота. "
+                "Попросите администратора (username: gayazking) запустить /start в этом боте для получения заявок."
+            )
+        
+        # Очистить данные регистрации
+        context.user_data.pop('registration_data', None)
+        
+    except Exception as e:
+        logging.exception("Ошибка подтверждения регистрации:")
+        await query.edit_message_text("❌ Ошибка при сохранении данных. Попробуйте еще раз.")
+
+async def handle_registration_restart(query, context):
+    """Обработка перезапуска регистрации"""
+    try:
+        # Очистить данные и начать заново
+        context.user_data.pop('registration_data', None)
+        context.user_data['waiting_for_full_name'] = True
+        
+        await query.edit_message_text(
+            "🔄 **Начинаем заново**\n\n"
+            "📝 Введите ваше полное ФИО (Фамилия Имя Отчество):\n\n"
+            "Пример: Иванов Иван Иванович",
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logging.exception("Ошибка перезапуска регистрации:")
+        await query.edit_message_text("❌ Ошибка. Попробуйте еще раз.")
 
 async def get_last_event_type(user_id):
     """Получить тип последнего события пользователя"""
@@ -275,9 +446,16 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 **Как работать с системой:**
 
-🔹 **Сканирование QR-кода:**
-   • Отправьте фото QR-кода с терминала
-   • Или скопируйте текст QR-кода и отправьте
+🔹 **Отметка прихода/ухода:**
+   • Сфотографируйте QR-код с терминала
+   • Отправьте фото в этот чат
+   • Убедитесь, что QR-код четко виден и не размыт
+
+🔹 **Требования к фото:**
+   • Хорошее освещение
+   • QR-код полностью в кадре
+   • Четкое изображение без размытия
+   • Держите телефон ровно
 
 🔹 **Логика прихода/ухода:**
    • Первое сканирование - только "Пришел"
@@ -302,7 +480,15 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **Поддержка:**
 При проблемах обратитесь к администратору.
     """
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📞 Написать разработчику", callback_data="contact_developer"),
+            InlineKeyboardButton("🐛 Сообщить об ошибке", callback_data="report_bug")
+        ]
+    ])
+    
+    await update.message.reply_text(help_text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def handle_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка админ-панели для суперпользователя"""
@@ -498,6 +684,26 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", reply_markup=keyboard, parse_mode='Markdown')
         else:
             await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", parse_mode='Markdown')
+        return
+
+    # Проверка на ожидание сообщения разработчику
+    if context.user_data.get('waiting_for_developer_message'):
+        await handle_developer_message(update, context, text)
+        return
+    
+    # Проверка на ожидание сообщения об ошибке
+    if context.user_data.get('waiting_for_bug_report'):
+        await handle_bug_report(update, context, text)
+        return
+
+    # Проверка на ожидание ФИО
+    if context.user_data.get('waiting_for_full_name'):
+        await handle_full_name_input(update, context, text)
+        return
+    
+    # Проверка на ожидание даты рождения
+    if context.user_data.get('waiting_for_birth_date'):
+        await handle_birth_date_input(update, context, text)
         return
 
     # Проверка авторизации пользователя
@@ -945,6 +1151,41 @@ if __name__ == "__main__":
             await query.edit_message_text(f"🐾 **Мой тамагочи:**\n\n{message}\n\n{tamagotchi_status}", parse_mode='Markdown')
             return
 
+        # Обработка связи с разработчиком и сообщений об ошибках
+        if data == "contact_developer":
+            await query.edit_message_text(
+                "📞 **Связь с разработчиком**\n\n"
+                "Для связи с разработчиком напишите @gayazking\n\n"
+                "Или опишите вашу проблему здесь, и мы передадим её разработчику.",
+                parse_mode='Markdown'
+            )
+            # Установить состояние ожидания сообщения разработчику
+            context.user_data['waiting_for_developer_message'] = True
+            return
+        
+        if data == "report_bug":
+            await query.edit_message_text(
+                "🐛 **Сообщить об ошибке**\n\n"
+                "Опишите подробно ошибку, которую вы обнаружили:\n"
+                "• Что вы делали когда произошла ошибка?\n"
+                "• Какое сообщение об ошибке появилось?\n"
+                "• В какое время это произошло?\n\n"
+                "Напишите ваше сообщение:",
+                parse_mode='Markdown'
+            )
+            # Установить состояние ожидания сообщения об ошибке
+            context.user_data['waiting_for_bug_report'] = True
+            return
+
+        # Обработка подтверждения и перезапуска регистрации
+        if data == "confirm_registration":
+            await handle_registration_confirmation(query, context)
+            return
+        
+        if data == "restart_registration":
+            await handle_registration_restart(query, context)
+            return
+
         # Обработка заявок на регистрацию (только для админа)
         admin_user = query.from_user
         if admin_user.username != ADMIN_USERNAME:
@@ -961,7 +1202,21 @@ if __name__ == "__main__":
             if user_data and user_data.get("chat_id"):
                 await context.bot.send_message(
                     chat_id=user_data["chat_id"],
-                    text="Ваша заявка на регистрацию одобрена! Теперь вы можете сканировать QR-коды."
+                    text="""✅ **Ваша заявка на регистрацию одобрена!**
+
+📱 **Как отмечать приход и уход:**
+1. Найдите QR-код на терминале в вашем филиале
+2. Сфотографируйте QR-код камерой телефона
+3. Отправьте фото в этот чат
+
+📸 **Требования к фото:**
+• Хорошее освещение
+• QR-код полностью в кадре  
+• Четкое изображение без размытия
+• Держите телефон ровно
+
+Теперь вы можете отмечать свой приход и уход!""",
+                    parse_mode='Markdown'
                 )
             await query.edit_message_text("Пользователь одобрен.")
         elif data.startswith("decline_"):
@@ -1145,7 +1400,7 @@ if __name__ == "__main__":
                 elif user.get("role") == "admin":
                     user_buttons.append(InlineKeyboardButton("👤", callback_data=f"user_demote_{user['telegram_id']}"))
                 
-                user_buttons.append(InlineKeyboardButton("🗑", callback_data=f"user_delete_{user['telegram_id']}"))
+                user_buttons.append(InlineKeyboardButton(f"🗑 {name[:10]}", callback_data=f"user_delete_{user['telegram_id']}"))
                 
                 if user_buttons:
                     keyboard_buttons.append(user_buttons)
@@ -1637,7 +1892,6 @@ if __name__ == "__main__":
         try:
             import aiohttp
             import asyncio
-            from datetime import datetime, timedelta
             
             # --- OpenWeatherMap ---------------------------------
             api_key = os.getenv("OPENWEATHER_API_KEY") or ""
@@ -1723,11 +1977,129 @@ if __name__ == "__main__":
         tomorrow = (datetime.now() + timedelta(days=1)).strftime('%d.%m')
         return f"🌤 Прогноз погоды на {tomorrow}: сервис временно недоступен"
 
+    # Функции для обработки сообщений разработчику и об ошибках
+    async def handle_developer_message(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+        """Обработка сообщения разработчику"""
+        try:
+            user = update.message.from_user
+            user_id = user.id
+            first_name = getattr(user, "first_name", "")
+            last_name = getattr(user, "last_name", "")
+            username = getattr(user, "username", "")
+            
+            # Сохранить сообщение в базу данных
+            message_data = {
+                "telegram_id": user_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+                "message_type": "developer_contact",
+                "message_text": text,
+                "created_at": get_moscow_time().isoformat(),
+                "status": "new"
+            }
+            
+            supabase.table("feedback_messages").insert(message_data).execute()
+            
+            # Отправить уведомление админу и суперадмину
+            admin_query = supabase.table("users").select("*").in_("role", ["admin", "superuser"]).execute()
+            
+            for admin in admin_query.data if admin_query.data else []:
+                if admin.get("chat_id"):
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin["chat_id"],
+                            text=f"""📞 **Сообщение разработчику**
+
+👤 **От:** {first_name} {last_name} (@{username})
+🆔 **ID:** {user_id}
+📝 **Сообщение:**
+{text}
+
+🕐 **Время:** {get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК""",
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e:
+                        logging.exception(f"Ошибка отправки уведомления админу {admin['telegram_id']}:")
+            
+            await update.message.reply_text(
+                "✅ Ваше сообщение отправлено разработчику!\n\n"
+                "Мы рассмотрим ваше обращение и свяжемся с вами в ближайшее время.",
+                parse_mode='Markdown'
+            )
+            
+            # Сбросить состояние
+            context.user_data.pop('waiting_for_developer_message', None)
+            
+        except Exception as e:
+            logging.exception("Ошибка обработки сообщения разработчику:")
+            await update.message.reply_text("❌ Ошибка отправки сообщения. Попробуйте еще раз.")
+
+    async def handle_bug_report(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+        """Обработка сообщения об ошибке"""
+        try:
+            user = update.message.from_user
+            user_id = user.id
+            first_name = getattr(user, "first_name", "")
+            last_name = getattr(user, "last_name", "")
+            username = getattr(user, "username", "")
+            
+            # Сохранить сообщение в базу данных
+            bug_data = {
+                "telegram_id": user_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+                "message_type": "bug_report",
+                "message_text": text,
+                "created_at": get_moscow_time().isoformat(),
+                "status": "new",
+                "priority": "medium"
+            }
+            
+            supabase.table("feedback_messages").insert(bug_data).execute()
+            
+            # Отправить уведомление админу и суперадмину
+            admin_query = supabase.table("users").select("*").in_("role", ["admin", "superuser"]).execute()
+            
+            for admin in admin_query.data if admin_query.data else []:
+                if admin.get("chat_id"):
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin["chat_id"],
+                            text=f"""🐛 **СООБЩЕНИЕ ОБ ОШИБКЕ**
+
+👤 **От:** {first_name} {last_name} (@{username})
+🆔 **ID:** {user_id}
+🐛 **Описание ошибки:**
+{text}
+
+🕐 **Время:** {get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК
+⚠️ **Приоритет:** Средний""",
+                            parse_mode='Markdown'
+                        )
+                    except Exception as e:
+                        logging.exception(f"Ошибка отправки уведомления об ошибке админу {admin['telegram_id']}:")
+            
+            await update.message.reply_text(
+                "✅ Ваше сообщение об ошибке отправлено!\n\n"
+                "🔧 Мы исправим эту проблему в ближайшее время.\n"
+                "📧 При необходимости с вами свяжутся для уточнения деталей.\n\n"
+                "Спасибо за помощь в улучшении системы! 🙏",
+                parse_mode='Markdown'
+            )
+            
+            # Сбросить состояние
+            context.user_data.pop('waiting_for_bug_report', None)
+            
+        except Exception as e:
+            logging.exception("Ошибка обработки сообщения об ошибке:")
+            await update.message.reply_text("❌ Ошибка отправки сообщения. Попробуйте еще раз.")
+
     app.add_handler(MessageHandler(filters.CONTACT, contact_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_qr))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_qr))
     from telegram.ext import CallbackQueryHandler
     app.add_handler(CallbackQueryHandler(callback_handler))
 

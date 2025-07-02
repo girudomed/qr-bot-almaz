@@ -27,8 +27,7 @@ def get_moscow_timestamp():
     return int(get_moscow_time().timestamp())
 
 # Загрузка переменных окружения
-if Path('.env').is_file():
-    load_dotenv()      # локальная разработка
+load_dotenv()
 
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -40,6 +39,7 @@ if not (SUPABASE_URL and SUPABASE_KEY and QR_SECRET):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "your-secret-key-here-change-in-production")
 
 @app.route('/health')
 def health():
@@ -82,8 +82,90 @@ def generate_qr_payload(branch_id, branch_name):
     base64_str = base64.urlsafe_b64encode(json_str.encode()).decode()
     return base64_str
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        
+        if username == "Admin" and password == "master940nw":
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        else:
+            return render_template_string(
+                """
+                <!doctype html>
+                <html>
+                <head>
+                    <title>Авторизация</title>
+                    <meta charset="utf-8">
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+                        body { font-family: 'Montserrat', Arial, sans-serif; background: #f4f4f4; padding: 2em; }
+                        .container { background: #fff; padding: 2em; max-width: 400px; margin: auto; border-radius: 16px; box-shadow: 0 0 10px #bbb; }
+                        input, button { padding: 0.6em 1em; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 1em; width: 100%; font-family: 'Montserrat', Arial, sans-serif; }
+                        .error { color: #dc3545; margin-bottom: 1em; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h2>Авторизация</h2>
+                        <div class="error">Неверный логин или пароль</div>
+                        <form method="post">
+                            <input type="text" name="username" placeholder="Логин" required>
+                            <input type="password" name="password" placeholder="Пароль" required>
+                            <button type="submit">Войти</button>
+                        </form>
+                    </div>
+                </body>
+                </html>
+                """
+            )
+    
+    return render_template_string(
+        """
+        <!doctype html>
+        <html>
+        <head>
+            <title>Авторизация</title>
+            <meta charset="utf-8">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+                body { font-family: 'Montserrat', Arial, sans-serif; background: #f4f4f4; padding: 2em; }
+                .container { background: #fff; padding: 2em; max-width: 400px; margin: auto; border-radius: 16px; box-shadow: 0 0 10px #bbb; }
+                input, button { padding: 0.6em 1em; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 1em; width: 100%; font-family: 'Montserrat', Arial, sans-serif; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Авторизация</h2>
+                <form method="post">
+                    <input type="text" name="username" placeholder="Логин" required>
+                    <input type="password" name="password" placeholder="Пароль" required>
+                    <button type="submit">Войти</button>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
+    )
+
+@app.route("/logout")
+def logout():
+    session.pop("authenticated", None)
+    return redirect(url_for("login"))
+
+def require_auth():
+    if not session.get("authenticated"):
+        return redirect(url_for("login"))
+    return None
+
 @app.route("/", methods=["GET"])
 def index():
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
     branches = get_branches()
     return render_template_string(
         """
@@ -93,9 +175,10 @@ def index():
             <title>QR для сотрудников</title>
             <meta charset="utf-8">
             <style>
-                body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 2em; }
+                @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+                body { font-family: 'Montserrat', Arial, sans-serif; background: #f4f4f4; padding: 2em; }
                 .container { background: #fff; padding: 2em; max-width: 400px; margin: auto; border-radius: 16px; box-shadow: 0 0 10px #bbb; }
-                select, button { padding: 0.6em 1em; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 1em; width: 100%; }
+                select, button { padding: 0.6em 1em; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 1em; width: 100%; font-family: 'Montserrat', Arial, sans-serif; }
                 img { display: block; margin: 1.5em auto; }
             </style>
         </head>
@@ -111,6 +194,9 @@ def index():
                     </select>
                     <button type="submit">Показать QR</button>
                 </form>
+                <div style="margin-top: 1em; text-align: center;">
+                    <a href="/logout" style="color: #666; text-decoration: none; font-size: 0.9em;">Выйти</a>
+                </div>
             </div>
         </body>
         </html>
@@ -119,6 +205,10 @@ def index():
 
 @app.route("/qr", methods=["GET"])
 def qr():
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
     branch_id = request.args.get("branch_id", type=int)
     if not branch_id:
         return "Не выбран филиал", 400
@@ -156,11 +246,12 @@ def qr():
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
             <title>QR-код для {{branch['name']}}</title>
             <style>
+                @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
                 html,body {
                     height: 100%;
                     margin: 0;
                     padding: 0;
-                    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+                    font-family: 'Montserrat', 'Inter', 'Segoe UI', Arial, sans-serif;
                     background: linear-gradient(135deg, #0e1f13 0%, #1a3a24 100%);
                     color: #eaf7ef;
                     min-height: 100vh;
@@ -174,7 +265,7 @@ def qr():
                     background: rgba(24, 44, 32, 0.97);
                     border-radius: 2.2rem;
                     box-shadow: 0 8px 40px 0 rgba(34, 139, 34, 0.18), 0 1.5px 8px 0 rgba(0,0,0,0.10);
-                    max-width: 420px;
+                    max-width: 630px;
                     margin: auto;
                     padding: 2.2rem 1.2rem 1.2rem 1.2rem;
                     display: flex;
@@ -197,14 +288,13 @@ def qr():
                     font-weight: 500;
                     line-height: 1.45;
                     color: #1a3a24;
-                    background: linear-gradient(135deg, #eaf7ef 0%, #b6f5c6 100%);
+                    background: #ffffff;
                     border: 1.5px solid #4ecb7a;
                     border-radius: 1.1rem;
                     margin-bottom: 0.2rem;
                     padding: 1rem 0.8rem;
-                    min-height: 70px;
                     width: 100%;
-                    max-width: 340px;
+                    max-width: 510px;
                     box-sizing: border-box;
                     box-shadow: 0 2px 12px rgba(76, 203, 122, 0.10);
                     display: flex;
@@ -214,6 +304,9 @@ def qr():
                     overflow-wrap: break-word;
                     word-break: break-word;
                     hyphens: auto;
+                    white-space: pre-wrap;
+                    transition: all 0.4s ease-in-out;
+                    min-height: auto;
                 }
                 h2 {
                     font-size: 1.13rem;
@@ -231,6 +324,7 @@ def qr():
                     justify-content: center;
                     align-items: center;
                     margin-bottom: 0.2rem;
+                    transition: transform 0.4s ease-in-out;
                 }
                 .qr-box img {
                     width: 60vw;
@@ -252,14 +346,13 @@ def qr():
                     color: #b6f5c6;
                     text-decoration: none;
                     font-weight: 500;
-                    font-size: 1.01rem;
-                    border-bottom: 1px dashed #b6f5c6;
+                    font-size: 1.5rem;
                     transition: color 0.2s;
                 }
-                .back-link:hover { color: #4ecb7a; border-bottom: 1px solid #4ecb7a; }
+                .back-link:hover { color: #4ecb7a; }
                 @media (max-width: 600px) {
                     .container { padding: 0.7rem 0.2rem; min-height: 99vh; }
-                    .philosophy-block { min-height: 50px; font-size: 0.98em; }
+                    .philosophy-block { font-size: 0.98em; }
                     .qr-box img { width: 90vw; max-width: 98vw; }
                 }
             </style>
@@ -276,27 +369,43 @@ def qr():
                     <span id="timer">Обновление через: <span id="countdown">30</span> сек</span>
                 </div>
                 <div style="font-size:0.97rem;color:#b6f5c6;margin-top:0.1rem;">QR-код действителен 1 минуту</div>
-                <a class="back-link" href="/">← Назад к выбору филиала</a>
+                <a class="back-link" href="/">←</a>
             </div>
             <script>
                 // Философия из Python
                 const philosophyPoints = {{ philosophy_points|tojson }};
                 let philosophyBlock = document.getElementById('philosophy-text');
+                
                 function getRandomPhilosophy() {
                     const randomIndex = Math.floor(Math.random() * philosophyPoints.length);
-                    philosophyBlock.textContent = philosophyPoints[randomIndex];
+                    const pointNumber = randomIndex + 1;
+                    
+                    // Плавная смена текста с адаптацией размера
+                    philosophyBlock.style.opacity = '0.6';
+                    philosophyBlock.style.transform = 'scale(0.98)';
+                    
+                    setTimeout(() => {
+                        philosophyBlock.textContent = `${pointNumber}. ${philosophyPoints[randomIndex]}`;
+                        
+                        // Возвращаем нормальное состояние
+                        philosophyBlock.style.opacity = '1';
+                        philosophyBlock.style.transform = 'scale(1)';
+                    }, 200);
                 }
+                
                 getRandomPhilosophy();
-                setInterval(getRandomPhilosophy, 10000);
+                setInterval(getRandomPhilosophy, 15000);
 
                 let countdown = 30;
                 let timerElement = document.getElementById('countdown');
                 let qrImage = document.getElementById('qr-image');
                 let branchId = {{branch['id']}};
+                
                 function updateQR() {
                     qrImage.src = '/qr_image?branch_id=' + branchId + '&t=' + Date.now();
                     countdown = 30;
                 }
+                
                 function updateTimer() {
                     timerElement.textContent = countdown;
                     countdown--;
@@ -304,6 +413,7 @@ def qr():
                         updateQR();
                     }
                 }
+                
                 setInterval(updateTimer, 1000);
                 setInterval(updateQR, 30000);
             </script>
@@ -314,6 +424,10 @@ def qr():
 
 @app.route("/qr_image")
 def qr_image():
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
     # Поддержка старого формата (data) и нового (branch_id)
     data = request.args.get("data", "")
     branch_id = request.args.get("branch_id", type=int)
