@@ -1,49 +1,69 @@
-# QR-bot stack — Compose v2 (version: не нужен)
+# QR-bot stack — Compose v2
 
 # ── Сети ───────────────────────────────────────────────────────────────
 networks:
-  qr_net: {}                       # bridge по-умолчанию
-  caddy_net:
-    external: true                 # создаёт Caddy-стек
+  qr_net: {}                       # внутренняя изоляция
+  caddy_net:                       # создаётся Caddy-стеком
+    external: true
 
-# ── Якорь без build (общие параметры) ──────────────────────────────────
+# ── Параметры (тег образа можно задать из CI) ──────────────────────────
+#   export QR_IMAGE_TAG=abcd123  → образ qr-bot-almaz:abcd123
+x-image-tag: &image_tag "${QR_IMAGE_TAG:-latest}"
+
+# ── Общий якорь (без build) ────────────────────────────────────────────
 x-qr-image: &qr_image
-  image: qr-bot-almaz:latest       # образ, который соберёт web
-  env_file: [.env]
+  image: "qr-bot-almaz:*image_tag"          # версионируемый тег
+  env_file: [.env]                          # переменные без копирования файла
   restart: unless-stopped
   networks: [qr_net]
+  deploy:
+    resources:
+      limits: {cpus: "0.50", memory: "256M"}
 
 # ── Сервисы ────────────────────────────────────────────────────────────
 services:
   # ---------- WEB (Flask + Gunicorn) -----------------------------------
   web:
     <<: *qr_image
-    build: .                       # ← build теперь только здесь!
+    build: .                                # образ собирается ОДИН раз
+    container_name: qrbot_web               # нужно CI-workflow'у
     command: >
-      gunicorn -w 2 -k gthread -t 30 -b 0.0.0.0:8080 web.main:app
-    expose: ["8080"]               # порт доступен лишь внутри сетей
+      gunicorn -w 2 -k gthread -t 30
+      -b 0.0.0.0:8080 web.main:app
+    expose: ["8080"]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-    networks:                      # + прокси-сеть для Caddy
-      - qr_net
-      - caddy_net
-    # если Caddy обращается к web по имени контейнера — раскомментируйте:
-    # container_name: qrbot_web
+    networks: [qr_net, caddy_net]
 
-  # ---------- BOT (Telegram-бот) --------------------------------------
+  # ---------- BOT (Telegram-bot) ---------------------------------------
   bot:
     <<: *qr_image
     command: python -u bot/bot.py
+    healthcheck:                         # простая «жив ли процесс»
+      test: ["CMD-SHELL", "pgrep -f bot/bot.py || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # ---------- TAMAGOTCHI scheduler -------------------------------------
   tamagotchi_scheduler:
     <<: *qr_image
     command: python -u schedulers/tamagotchi_scheduler.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f tamagotchi_scheduler.py || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
 
   # ---------- AUTO-CLOSE scheduler -------------------------------------
   auto_close_scheduler:
     <<: *qr_image
     command: python -u schedulers/auto_close_scheduler.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f auto_close_scheduler.py || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
