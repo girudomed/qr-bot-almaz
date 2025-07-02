@@ -7,11 +7,10 @@ import base64
 import hmac
 import hashlib
 from datetime import datetime, timezone, timedelta
-from flask import Flask, request, render_template_string, send_file
+from flask import Flask, request, render_template_string, send_file, session, redirect, url_for
 from dotenv import load_dotenv
 import qrcode
 from pathlib import Path
-from dotenv import load_dotenv
 import utils.httpx_proxy_patch  # noqa: F401
 from supabase import create_client, Client
 
