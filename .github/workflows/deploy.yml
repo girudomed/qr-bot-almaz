@@ -54,7 +54,6 @@ jobs:
 
           echo "== Обновляем base-images и пересобираем web =="
           # Caddy стягивается pull'ом, qr-bot собираем локально
-          docker compose pull caddy || true            # если Caddy в отдельном стеке — строку убрать
           docker compose build web --pull
 
           echo "== Запускаем контейнеры =="
