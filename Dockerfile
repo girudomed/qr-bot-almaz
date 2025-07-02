@@ -37,6 +37,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
         gotrue==1.3.1 \
         realtime==1.0.2 \
         storage3==0.7.0 \
+        deprecation==2.1.0 \
         --no-deps && \
     # --- clean ---
     apt-get purge -y --auto-remove build-essential && \
