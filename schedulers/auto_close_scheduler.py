@@ -5,6 +5,7 @@ import schedule
 import time
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
+import utils.httpx_proxy_patch
 from supabase import create_client, Client
 from telegram import Bot
 from pathlib import Path

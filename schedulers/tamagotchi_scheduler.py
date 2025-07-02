@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
+import utils.httpx_proxy_patch
 from supabase import create_client, Client
 from telegram import Bot
 import random
