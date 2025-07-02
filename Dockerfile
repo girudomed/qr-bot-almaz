@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ###############################################################################
-# 1) Базовый слой: Debian-Slim + Python 3.11
+# 1) База: Debian-Slim + Python 3.11
 ###############################################################################
 FROM python:3.11-slim
 
@@ -10,9 +10,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 ###############################################################################
 # 2) Системные зависимости
-#    libzbar0        – pyzbar для QR-кодов
-#    curl            – health-check'и
-#    procps + ping   – pgrep / ping внутри контейнера (диагностика)
+#    libzbar0   – pyzbar (распознавание QR)
+#    curl       – health-check
+#    procps/ping – pgrep + ping (диагностика в контейнере)
 ###############################################################################
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
@@ -21,27 +21,36 @@ RUN apt-get update -qq && \
 
 ###############################################################################
 # 3) Python-зависимости
-#    – requirements.txt (+ gunicorn)
-#    – supabase-py 2.16 **без зависимостей**, чтобы не притянул старый httpx
+#    – основной requirements.txt (+ gunicorn)
+#    – Supabase-py 1.0.3 и его подпакеты --no-deps
+#      (чтобы не притянуть «старый» httpx<0.24)
 ###############################################################################
 WORKDIR /app
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt gunicorn && \
-    pip install --no-cache-dir supabase==2.16.0 --no-deps && \
+    # --- Supabase-py 1.x + подпакеты, но БЕЗ зависимостей ---
+    pip install --no-cache-dir \
+        supabase==1.0.3 \
+        gotrue==1.3.1 \
+        postgrest==0.14.1 \
+        realtime==1.0.2 \
+        storage3==0.7.0 \
+        --no-deps && \
+    # --- clean ---
     apt-get purge -y --auto-remove build-essential && \
     rm -rf /root/.cache
 
 ###############################################################################
-# 4) Исходники под непривилегированного пользователя
+# 4) Исходники и непривилегированный пользователь
 ###############################################################################
 RUN useradd -m -U qrbot
 COPY --chown=qrbot:qrbot . .
 USER qrbot
 
 ###############################################################################
-# 5) Порт, health-check и дефолтная команда (для web)
+# 5) Порт, health-check и дефолтный CMD (Web)
 ###############################################################################
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
