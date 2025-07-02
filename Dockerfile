@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     # --- Supabase-py 1.x + подпакеты, но БЕЗ зависимостей ---
     pip install --no-cache-dir \
         supabase==1.0.3 \
+        postgrest==0.16.11 \
         gotrue==1.3.1 \
         realtime==1.0.2 \
         storage3==0.7.0 \
