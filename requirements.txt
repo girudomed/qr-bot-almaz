@@ -14,7 +14,6 @@ python-telegram-bot==20.7          # тянет httpx>=0.25.2 сам
 
 # —–– Supabase 1.x, где ещё есть аргумент proxy —––
 supabase==1.0.3                  # строго фиксируем
-gotrue==1.7.1                    # имя пакета без «-py»
 
 # --- Разное ---
 pyzbar==0.1.9
