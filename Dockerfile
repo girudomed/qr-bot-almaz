@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
         realtime==1.0.2 \
         storage3==0.7.0 \
         deprecation==2.1.0 \
+        python-dateutil==2.9.0.post0 \
         --no-deps && \
     # --- clean ---
     apt-get purge -y --auto-remove build-essential && \
