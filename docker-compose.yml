@@ -1,32 +1,29 @@
 # QR-bot stack — Compose v2
+# ---------------------------------------------------------------------
 
-# ── Сети ───────────────────────────────────────────────────────────────
 networks:
   qr_net: {}                       # внутренняя изоляция
-  caddy_net:                       # создаётся Caddy-стеком
+  caddy_net:                       # создаёт Caddy-стек
     external: true
 
-# ── Параметры (тег образа можно задать из CI) ──────────────────────────
-#   export QR_IMAGE_TAG=abcd123  → образ qr-bot-almaz:abcd123
-x-image-tag: &image_tag "${QR_IMAGE_TAG:-latest}"
-
-# ── Общий якорь (без build) ────────────────────────────────────────────
+# export QR_IMAGE_TAG=abcd123 ⇒ образ qr-bot-almaz:abcd123
+# если переменная не задана — берётся latest
 x-qr-image: &qr_image
-  image: "qr-bot-almaz:*image_tag"          # версионируемый тег
-  env_file: [.env]                          # переменные без копирования файла
+  image: "qr-bot-almaz:${QR_IMAGE_TAG:-latest}"
+  env_file: [.env]
   restart: unless-stopped
   networks: [qr_net]
   deploy:
     resources:
       limits: {cpus: "0.50", memory: "256M"}
 
-# ── Сервисы ────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------
 services:
-  # ---------- WEB (Flask + Gunicorn) -----------------------------------
+  # ---------- WEB (Flask + Gunicorn) ----------------------------------
   web:
     <<: *qr_image
-    build: .                                # образ собирается ОДИН раз
-    container_name: qrbot_web               # нужно CI-workflow'у
+    build: .                       # образ собирается ОДИН раз
+    container_name: qrbot_web      # для CI-workflow
     command: >
       gunicorn -w 2 -k gthread -t 30
       -b 0.0.0.0:8080 web.main:app
@@ -38,17 +35,17 @@ services:
       retries: 3
     networks: [qr_net, caddy_net]
 
-  # ---------- BOT (Telegram-bot) ---------------------------------------
+  # ---------- BOT (Telegram-bot) --------------------------------------
   bot:
     <<: *qr_image
     command: python -u bot/bot.py
-    healthcheck:                         # простая «жив ли процесс»
+    healthcheck:
       test: ["CMD-SHELL", "pgrep -f bot/bot.py || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
 
-  # ---------- TAMAGOTCHI scheduler -------------------------------------
+  # ---------- TAMAGOTCHI scheduler ------------------------------------
   tamagotchi_scheduler:
     <<: *qr_image
     command: python -u schedulers/tamagotchi_scheduler.py
@@ -58,7 +55,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # ---------- AUTO-CLOSE scheduler -------------------------------------
+  # ---------- AUTO-CLOSE scheduler ------------------------------------
   auto_close_scheduler:
     <<: *qr_image
     command: python -u schedulers/auto_close_scheduler.py
