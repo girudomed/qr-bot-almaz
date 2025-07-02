@@ -30,6 +30,8 @@ for _c in (httpx.Client, httpx.AsyncClient):
 from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
+from pathlib import Path
+from dotenv import load_dotenv
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
@@ -42,7 +44,9 @@ def get_moscow_timestamp():
     """Получить timestamp московского времени"""
     return int(get_moscow_time().timestamp())
 
-load_dotenv()
+# Загрузка переменных окружения
+if Path('.env').is_file():
+    load_dotenv()      # локальная разработка
 
 # Настройки логирования
 logging.basicConfig(

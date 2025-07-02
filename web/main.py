@@ -10,6 +10,8 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, request, render_template_string, send_file
 from dotenv import load_dotenv
 import qrcode
+from pathlib import Path
+from dotenv import load_dotenv
 # ── TEMP PATCH: Supabase vs httpx>=0.25  (удалить, когда supabase-py починят) ──
 # ── TEMP PATCH: supabase-py (≤2.16) vs httpx (≥0.25) ─────────────────────────
 import httpx, functools
@@ -42,7 +44,8 @@ def get_moscow_timestamp():
     return int(get_moscow_time().timestamp())
 
 # Загрузка переменных окружения
-load_dotenv()
+if Path('.env').is_file():
+    load_dotenv()      # локальная разработка
 
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")

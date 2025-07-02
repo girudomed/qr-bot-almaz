@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from telegram import Bot
 import random
+from pathlib import Path
+from dotenv import load_dotenv
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
@@ -15,7 +17,8 @@ def get_moscow_time():
     """Получить текущее время в Москве"""
     return datetime.now(MOSCOW_TZ)
 
-load_dotenv()
+if Path('.env').is_file():
+    load_dotenv()      # локальная разработка
 
 # Настройки логирования
 logging.basicConfig(
