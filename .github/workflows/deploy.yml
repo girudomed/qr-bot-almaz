@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
 
-# • гарантируем, что одновременно идёт только один деплой
 concurrency:
   group: deploy-qrbot-${{ github.ref }}
   cancel-in-progress: true
@@ -14,23 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # ────────────────────────── 1. Код проекта ──────────────────────────
+    # ────────────────────────────────── 1. Код ──────────────────────────────────
     - name: Checkout source
-      uses: actions/checkout@v4.1.2   # ← пин по минор-версии
+      uses: actions/checkout@v4.1.2
 
-    # ─────────────────── 2. SSH-сессия и Docker-оркестрация ─────────────
+    # ─────────────────────────── 2. SSH + Docker ───────────────────────────────
     - name: Deploy on VPS
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host:         ${{ secrets.SERVER_HOST }}
-        username:     ${{ secrets.SERVER_USER }}
-        key:          ${{ secrets.SSH_KEY }}
-        port:         ${{ secrets.SERVER_PORT || '22' }}
-        fingerprint:  ${{ secrets.SERVER_FINGERPRINT }}   # ← правильный параметр
+        host:        ${{ secrets.SERVER_HOST }}
+        username:    ${{ secrets.SERVER_USER }}
+        key:         ${{ secrets.SSH_KEY }}
+        port:        ${{ secrets.SERVER_PORT || '22' }}
+        fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
 
         script: |
           set -Eeuo pipefail
-
           PROJECT_DIR="$HOME/qr-bot-almaz"
           REPO_URL="https://github.com/${{ github.repository }}"
 
@@ -41,13 +39,11 @@ jobs:
           cd "$PROJECT_DIR"
           git fetch origin main --tags
 
-          # стоп-кран, если на сервере что-то меняли вручную
           if ! git diff-index --quiet HEAD; then
             echo "::error::Есть непушёные изменения на сервере — деплой отменён."
             git status -s
             exit 1
           fi
-
           git merge --ff-only origin/main
 
           echo "== Проверяем наличие .env =="
@@ -56,31 +52,29 @@ jobs:
           echo "== Останавливаем текущий стек =="
           docker compose down || true
 
-          echo "== Тянем образы (Caddy) и собираем qrbot =="
-          # • Caddy берётся как image: caddy:2-alpine → просто pull
-          docker compose pull --ignore-pull-failures || true
-          # • Собираем только сервис qrbot (он указан с build:)
-          docker compose build qrbot --pull
+          echo "== Обновляем base-images и пересобираем web =="
+          # Caddy стягивается pull'ом, qr-bot собираем локально
+          docker compose pull caddy || true            # если Caddy в отдельном стеке — строку убрать
+          docker compose build web --pull
 
           echo "== Запускаем контейнеры =="
           docker compose up -d --remove-orphans
 
-          echo "== Ожидаем, пока qrbot станет healthy =="
+          echo "== Ждём, пока web станет healthy =="
           for i in {1..30}; do
-            status=$(docker inspect --format='{{.State.Health.Status}}' qrbot_almaz 2>/dev/null || echo "starting")
+            status=$(docker inspect --format='{{.State.Health.Status}}' qrbot_web 2>/dev/null || echo "starting")
             echo "  → $status"
             if [[ "$status" == "healthy" ]]; then
-              ok=1
-              break
+              ok=1; break
             fi
             sleep 2
           done
           [[ "${ok:-0}" == "1" ]] || {
-            echo "::error::qrbot не вышел в healthy-состояние"
+            echo "::error::web не вышел в healthy-состояние"
             docker compose ps
-            docker compose logs --tail=100 qrbot
+            docker compose logs --tail=100 web
             exit 1
           }
 
-          echo "== Чистим dangling-образы старше 24 ч =="
+          echo "== Чистим dangling-образы старше 24 ч ==" 
           docker image prune -af --filter "until=24h" || true

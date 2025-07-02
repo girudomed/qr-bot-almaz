@@ -1,61 +1,53 @@
-version: "3.9"
+# Docker Compose v2 – field "version" больше не нужен
 
 networks:
-  # внутренняя сеть всех наших контейнеров
   qr_net:
-    driver: bridge
-  # внешний прокси-layer — объявляем, но НЕ создаём: 
-  # сеть уже существует, её создаёт compose-файл Caddy
   caddy_net:
-    external: true
+    external: true     # создаётся стеком Caddy
+
+# ------------------------------------------------------------------------
+#  Якорь с единым образом: собираем один раз, используем в 4 сервисах
+# ------------------------------------------------------------------------
+x-qr-image: &qr_image
+  build: .
+  image: qr-bot-almaz:latest      # тег для reuse
+  env_file: .env
+  restart: unless-stopped
+  networks: [qr_net]
 
 services:
   # ---------- WEB ------------------------------------------------------
   web:
-    build: .
-    image: qr-bot-almaz:latest
+    <<: *qr_image
     container_name: qrbot_web
     command: >
       gunicorn -w 2 -k gthread -t 30 -b 0.0.0.0:8080 web.main:app
-    env_file: .env
-    expose:
-      - "8080"           # только для других контейнеров
-    restart: unless-stopped
+    expose: ["8080"]            # наружу не публикуем
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-    networks:
-      - qr_net
-      - caddy_net        # чтобы Caddy мог резолвить «web»
+    networks: [qr_net, caddy_net]
+    # если Caddy должен подняться раньше — раскомментируйте:
+    # depends_on:
+    #   caddy_reverse_proxy:
+    #     condition: service_started
 
   # ---------- BOT ------------------------------------------------------
   bot:
-    image: qr-bot-almaz:latest
+    <<: *qr_image
     container_name: qrbot_bot
     command: python -u bot/bot.py
-    env_file: .env
-    restart: unless-stopped
-    networks:
-      - qr_net
 
   # ---------- TAMAGOTCHI SCHEDULER -------------------------------------
   tamagotchi_scheduler:
-    image: qr-bot-almaz:latest
+    <<: *qr_image
     container_name: qrbot_tamagotchi
     command: python -u schedulers/tamagotchi_scheduler.py
-    env_file: .env
-    restart: unless-stopped
-    networks:
-      - qr_net
 
   # ---------- AUTO-CLOSE SCHEDULER -------------------------------------
   auto_close_scheduler:
-    image: qr-bot-almaz:latest
+    <<: *qr_image
     container_name: qrbot_autoclose
     command: python -u schedulers/auto_close_scheduler.py
-    env_file: .env
-    restart: unless-stopped
-    networks:
-      - qr_net
