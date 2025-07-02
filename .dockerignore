@@ -8,3 +8,5 @@ build/
 dist/
 *.log
 .env
+.git
+.vscode/

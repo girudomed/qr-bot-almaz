@@ -1,61 +1,48 @@
 # syntax=docker/dockerfile:1
 ###############################################################################
-# 1) Базовый слой ─ минимальный Debian-Slim + Python 3.11                    #
+# 1) Базовый слой: Debian-Slim + Python 3.11
 ###############################################################################
-FROM python:3.11-slim AS base
+FROM python:3.11-slim
 
-# Не заставляем apt задавать вопросы
 ENV DEBIAN_FRONTEND=noninteractive \
-    # предотвратим создание .pyc-файлов и буферизацию stdout
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 ###############################################################################
-# 2) Системные зависимости:                                                  #
-#    • libzbar0  – нужен pyzbar для распознавания QR                         #
-#    • curl      – для healthcheck                                           #
+# 2) Системные зависимости
+#    libzbar0   – pyzbar для QR-кодов
+#    curl       – health-check
+#    procps     – pgrep (health-check бота)
+#    iputils-ping – ping (диагностика сети)
 ###############################################################################
-RUN apt-get update -qq \
- && apt-get install -y --no-install-recommends libzbar0 curl \
- && apt-get purge --auto-remove -y gcc g++ build-essential || true \
- && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+        libzbar0 curl procps iputils-ping build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
-# 3) Подготовка директории приложения                                        #
+# 3) Кэшируем Python-зависимости
 ###############################################################################
 WORKDIR /app
-
-# requirements отдельно ─ кэш слоёв будет срабатывать,
-# если исходники меняются чаще, чем зависимости
-COPY requirements.txt /app/requirements.txt
-
-###############################################################################
-# 4) Установка python-зависимостей                                           #
-###############################################################################
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r /app/requirements.txt gunicorn
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt gunicorn && \
+    apt-get purge -y --auto-remove build-essential && \
+    rm -rf /root/.cache
 
 ###############################################################################
-# 5) Копируем исходники                                                     #
-###############################################################################
-COPY . /app
-
-###############################################################################
-# 6) Непривилегированный пользователь                                        #
+# 4) Копируем исходники под непривилегированного пользователя
 ###############################################################################
 RUN useradd -m -U qrbot
+COPY --chown=qrbot:qrbot . .
 USER qrbot
 
 ###############################################################################
-# 7) Port + Health-check                                                     #
+# 5) Health-check и дефолтная команда (для web)
 ###############################################################################
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
   CMD curl -fs http://localhost:8080/health || exit 1
 
-###############################################################################
-# 8) Дефолтный entrypoint (для web-сервера).                                 #
-#    Для других служб переопределяем в docker-compose.yml                    #
-###############################################################################
 CMD ["gunicorn", "-w", "2", "-k", "gthread", "-t", "30", \
      "-b", "0.0.0.0:8080", "web.main:app"]
