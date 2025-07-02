@@ -9,10 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1
 
 ###############################################################################
-# 2) Системные зависимости
-#    libzbar0   – pyzbar (распознавание QR)
-#    curl       – health-check
-#    procps/ping – pgrep + ping (диагностика в контейнере)
+# 2) Системные пакеты
 ###############################################################################
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
@@ -21,40 +18,36 @@ RUN apt-get update -qq && \
 
 ###############################################################################
 # 3) Python-зависимости
-#    – основной requirements.txt (+ gunicorn)
-#    – Supabase-py 1.0.3 и его подпакеты --no-deps
-#      (чтобы не притянуть «старый» httpx<0.24)
+#    3.1 base requirements + gunicorn
+#    3.2 вся экосистема Supabase 2.x с зависимостями
+#    3.3 обновляем httpx до 0.25.2 (нужен PTB и FastAPI)
 ###############################################################################
 WORKDIR /app
 COPY requirements.txt .
 
+# 3.1 base
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt gunicorn && \
-    # --- Supabase-py 1.x + подпакеты, но БЕЗ зависимостей ---
-    pip install --no-cache-dir \
-        supabase==1.0.3 \
-        postgrest==0.16.11 \
-        gotrue==1.3.1 \
-        realtime==1.0.2 \
-        storage3==0.7.0 \
-        deprecation==2.1.0 \
-        python-dateutil==2.9.0.post0 \
-        six==1.16.0 \
-        backoff==2.2.1 \
-        --no-deps && \
-    # --- clean ---
-    apt-get purge -y --auto-remove build-essential && \
+    pip install --no-cache-dir -r requirements.txt gunicorn
+
+# 3.2 Supabase-py 2.x (+ postgrest, storage3, supafunc … подтянутся сами)
+RUN pip install --no-cache-dir supabase==2.16.0
+
+# 3.3 httpx 0.25.2 поверх (pip лишь выдаст предупреждение — это нормально)
+RUN pip install --no-cache-dir --upgrade httpx==0.25.2
+
+# Чистим build-tools
+RUN apt-get purge -y --auto-remove build-essential && \
     rm -rf /root/.cache
 
 ###############################################################################
-# 4) Исходники и непривилегированный пользователь
+# 4) Исходники под непривилегированного пользователя
 ###############################################################################
 RUN useradd -m -U qrbot
 COPY --chown=qrbot:qrbot . .
 USER qrbot
 
 ###############################################################################
-# 5) Порт, health-check и дефолтный CMD (Web)
+# 5) Порт, health-check, CMD
 ###############################################################################
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
