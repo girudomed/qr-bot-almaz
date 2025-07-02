@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 import qrcode
 from pathlib import Path
 from dotenv import load_dotenv
-import utils.httpx_proxy_patch
+import utils.httpx_proxy_patch  # noqa: F401
 from supabase import create_client, Client
 
 # Московское время (UTC+3)

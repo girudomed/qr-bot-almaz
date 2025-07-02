@@ -9,7 +9,6 @@ import utils.httpx_proxy_patch
 from supabase import create_client, Client
 from telegram import Bot
 from pathlib import Path
-from dotenv import load_dotenv
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
@@ -19,7 +18,7 @@ def get_moscow_time():
     return datetime.now(MOSCOW_TZ)
 
 if Path('.env').is_file():
-    load_dotenv()      # локальная разработка)
+    load_dotenv()      # локальная разработка
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")

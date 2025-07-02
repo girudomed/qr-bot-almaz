@@ -14,7 +14,6 @@ from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
 from pathlib import Path
-from dotenv import load_dotenv
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))

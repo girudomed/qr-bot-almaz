@@ -11,6 +11,8 @@ networks:
 x-qr-image: &qr_image
   image: "qr-bot-almaz:${QR_IMAGE_TAG:-latest}"
   env_file: [.env]
+  environment:
+    - PYTHONPATH=/app
   restart: unless-stopped
   networks: [qr_net]
   deploy:

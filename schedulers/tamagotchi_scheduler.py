@@ -9,7 +9,6 @@ from supabase import create_client, Client
 from telegram import Bot
 import random
 from pathlib import Path
-from dotenv import load_dotenv
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
