@@ -1,3 +1,4 @@
+# tamagotchi_scheduler.py
 import os
 import asyncio
 import logging

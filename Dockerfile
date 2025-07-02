@@ -1,55 +1,61 @@
 # syntax=docker/dockerfile:1
+###############################################################################
+# 1) Базовый слой ─ минимальный Debian-Slim + Python 3.11                    #
+###############################################################################
+FROM python:3.11-slim AS base
+
+# Не заставляем apt задавать вопросы
+ENV DEBIAN_FRONTEND=noninteractive \
+    # предотвратим создание .pyc-файлов и буферизацию stdout
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 ###############################################################################
-# 1) Базовый минимальный образ
+# 2) Системные зависимости:                                                  #
+#    • libzbar0  – нужен pyzbar для распознавания QR                         #
+#    • curl      – для healthcheck                                           #
 ###############################################################################
-FROM python:3.11-slim
-
-###############################################################################
-# 2) Только нужные системные зависимости
-#    • libzbar0 — shared-lib для pyzbar
-#    • curl     — для HEALTHCHECK
-###############################################################################
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-        libzbar0 \
-        curl \
+RUN apt-get update -qq \
+ && apt-get install -y --no-install-recommends libzbar0 curl \
+ && apt-get purge --auto-remove -y gcc g++ build-essential || true \
  && rm -rf /var/lib/apt/lists/*
 
 ###############################################################################
-# 3) Пользователь-non-root и рабочая директория
+# 3) Подготовка директории приложения                                        #
 ###############################################################################
-RUN useradd -m -U qrbot
 WORKDIR /app
 
+# requirements отдельно ─ кэш слоёв будет срабатывать,
+# если исходники меняются чаще, чем зависимости
+COPY requirements.txt /app/requirements.txt
+
 ###############################################################################
-# 4) Python-зависимости    (под root → пишем в system-site-packages)
+# 4) Установка python-зависимостей                                           #
 ###############################################################################
-COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt gunicorn
+ && pip install --no-cache-dir -r /app/requirements.txt gunicorn
 
 ###############################################################################
-# 5) Копируем исходники и меняем владельца
+# 5) Копируем исходники                                                     #
 ###############################################################################
-COPY --chown=qrbot:qrbot . .
+COPY . /app
 
 ###############################################################################
-# 6) Переключаемся на непривилегированного юзера
+# 6) Непривилегированный пользователь                                        #
 ###############################################################################
+RUN useradd -m -U qrbot
 USER qrbot
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
 
 ###############################################################################
-# 7) Порт и встроенный health-check
+# 7) Port + Health-check                                                     #
 ###############################################################################
 EXPOSE 8080
-HEALTHCHECK --interval=60s --timeout=3s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD curl -fs http://localhost:8080/health || exit 1
 
 ###############################################################################
-# 8) Точка входа — Gunicorn (2 worker-thread’а)
+# 8) Дефолтный entrypoint (для web-сервера).                                 #
+#    Для других служб переопределяем в docker-compose.yml                    #
 ###############################################################################
-CMD ["gunicorn", "-w", "2", "-k", "gthread", "-t", "30", "-b", "0.0.0.0:8080", "main:app"]
+CMD ["gunicorn", "-w", "2", "-k", "gthread", "-t", "30", \
+     "-b", "0.0.0.0:8080", "web.main:app"]

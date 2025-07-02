@@ -1,27 +1,61 @@
-# docker-compose.yml
 version: "3.9"
 
+networks:
+  # внутренняя сеть всех наших контейнеров
+  qr_net:
+    driver: bridge
+  # внешний прокси-layer — объявляем, но НЕ создаём: 
+  # сеть уже существует, её создаёт compose-файл Caddy
+  caddy_net:
+    external: true
+
 services:
-  qrbot:
+  # ---------- WEB ------------------------------------------------------
+  web:
     build: .
-    container_name: qrbot_almaz
-    # приложение внутри всё так же слушает 8080
-    expose:                       # заменяет 'ports:' — наружу не торчит
-      - "8080"
-    env_file:
-      - .env
+    image: qr-bot-almaz:latest
+    container_name: qrbot_web
+    command: >
+      gunicorn -w 2 -k gthread -t 30 -b 0.0.0.0:8080 web.main:app
+    env_file: .env
+    expose:
+      - "8080"           # только для других контейнеров
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "30m"
-        max-file: "1"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - qr_net
+      - caddy_net        # чтобы Caddy мог резолвить «web»
 
-volumes:
-  caddy_data:
-  caddy_config:
+  # ---------- BOT ------------------------------------------------------
+  bot:
+    image: qr-bot-almaz:latest
+    container_name: qrbot_bot
+    command: python -u bot/bot.py
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - qr_net
+
+  # ---------- TAMAGOTCHI SCHEDULER -------------------------------------
+  tamagotchi_scheduler:
+    image: qr-bot-almaz:latest
+    container_name: qrbot_tamagotchi
+    command: python -u schedulers/tamagotchi_scheduler.py
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - qr_net
+
+  # ---------- AUTO-CLOSE SCHEDULER -------------------------------------
+  auto_close_scheduler:
+    image: qr-bot-almaz:latest
+    container_name: qrbot_autoclose
+    command: python -u schedulers/auto_close_scheduler.py
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - qr_net
