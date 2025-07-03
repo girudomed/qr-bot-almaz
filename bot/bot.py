@@ -762,8 +762,9 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expires = data.get("expires")
     signature = data.get("signature")
 
-    # Проверка подписи
+    # Проверка подписи - используем timestamp как time_window, так как веб генерирует подпись именно с time_window
     if not verify_signature(branch_id, timestamp, signature):
+        logging.info(f"Ошибка проверки подписи: branch_id={branch_id}, timestamp={timestamp}, signature={signature}")
         await update.message.reply_text("QR-код недействителен (ошибка подписи).")
         return
 
