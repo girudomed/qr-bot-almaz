@@ -850,7 +850,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Создать уникальное имя файла для избежания конфликтов
         import uuid
-        photo_path = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
+        photo_path = f"/tmp/temp_qr_{uuid.uuid4().hex[:8]}.jpg"
         
         # Скачать фото
         await photo_file.download_to_drive(photo_path)
