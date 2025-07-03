@@ -836,7 +836,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Создать уникальное имя файла для избежания конфликтов
         import uuid
-        photo_path = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
+        import tempfile
+        
+        # Использовать системную временную папку с правильными правами доступа
+        temp_dir = tempfile.gettempdir()
+        photo_filename = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
+        photo_path = os.path.join(temp_dir, photo_filename)
         
         # Скачать фото
         await photo_file.download_to_drive(photo_path)
