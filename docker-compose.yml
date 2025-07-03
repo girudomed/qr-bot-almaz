@@ -43,7 +43,7 @@ services:
     command: python -u bot/bot.py
     user: root
     volumes:
-      - ./app:/app 
+      - ./:/app 
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f bot/bot.py || exit 1"]
       interval: 30s
