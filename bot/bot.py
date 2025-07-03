@@ -52,34 +52,10 @@ if not all([TELEGRAM_TOKEN, QR_SECRET, SUPABASE_URL, SUPABASE_KEY]):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def verify_signature(branch_id, time_window, signature):
-    """Проверить подпись QR-кода с улучшенной логикой"""
-    try:
-        msg = f"{branch_id}:{time_window}".encode()
-        secret = QR_SECRET.encode()
-        expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
-        
-        # Проверяем точное совпадение
-        if hmac.compare_digest(signature, expected):
-            return True
-        
-        # Дополнительная проверка для соседних временных окон (±30 секунд)
-        # Это помогает при небольших расхождениях времени между сервером и клиентом
-        current_ts = get_moscow_timestamp()
-        current_window = current_ts // 30
-        
-        for offset in [-1, 1]:  # Проверяем предыдущее и следующее окно
-            test_window = current_window + offset
-            test_msg = f"{branch_id}:{test_window}".encode()
-            test_expected = hmac.new(secret, test_msg, hashlib.sha256).hexdigest()
-            if hmac.compare_digest(signature, test_expected):
-                logging.info(f"QR-код принят с временным смещением: {offset * 30} секунд")
-                return True
-        
-        return False
-        
-    except Exception as e:
-        logging.exception("Ошибка проверки подписи QR-кода:")
-        return False
+    msg = f"{branch_id}:{time_window}".encode()
+    secret = QR_SECRET.encode()
+    expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -762,9 +738,8 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expires = data.get("expires")
     signature = data.get("signature")
 
-    # Проверка подписи - используем timestamp как time_window, так как веб генерирует подпись именно с time_window
+    # Проверка подписи
     if not verify_signature(branch_id, timestamp, signature):
-        logging.info(f"Ошибка проверки подписи: branch_id={branch_id}, timestamp={timestamp}, signature={signature}")
         await update.message.reply_text("QR-код недействителен (ошибка подписи).")
         return
 
@@ -858,64 +833,64 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
         return
     
-    # Проверка авторизации пользователя
     user_id = update.message.from_user.id
-    if not await check_user_authorization(user_id):
-        await update.message.reply_text("Вы не авторизованы для работы с системой. Обратитесь к администратору.")
-        return
-    
     photo_path = None
+    
     try:
-        # Отправляем сообщение о начале обработки
+        # Проверка авторизации пользователя
+        if not await check_user_authorization(user_id):
+            await update.message.reply_text("Вы не авторизованы для работы с системой. Обратитесь к администратору.")
+            return
+        
+        # Отправить сообщение о начале обработки
         processing_message = await update.message.reply_text("🔍 Обрабатываю фото QR-кода...")
         
-        # Получаем фото наилучшего качества
+        # Получить файл фото (берем самое большое разрешение)
         photo_file = await update.message.photo[-1].get_file()
         
-        # Создаем уникальное имя файла для избежания конфликтов
+        # Создать уникальное имя файла для избежания конфликтов
         import uuid
         photo_path = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
         
+        # Скачать фото
         await photo_file.download_to_drive(photo_path)
+        logging.info(f"Фото скачано: {photo_path}, размер: {os.path.getsize(photo_path)} байт")
         
-        # Открываем и предварительно обрабатываем изображение
+        # Открыть и обработать изображение
         img = Image.open(photo_path)
+        logging.info(f"Изображение открыто: {img.size}, режим: {img.mode}")
         
-        # Конвертируем в RGB если необходимо
+        # Попробовать улучшить качество изображения для лучшего распознавания
+        # Конвертировать в RGB если нужно
         if img.mode != 'RGB':
             img = img.convert('RGB')
         
-        # Попытка декодирования QR-кода с оригинального изображения
+        # Попробовать декодировать QR-код
         decoded = decode(img)
         
-        # Если QR-код не найден, пробуем улучшить изображение
         if not decoded:
-            logging.info("QR-код не найден на оригинальном изображении, пробуем улучшить...")
+            # Если QR не найден, попробовать улучшить изображение
+            logging.info("QR-код не найден, пробуем улучшить изображение...")
             
-            # Увеличиваем контраст и яркость
+            # Увеличить контрастность
             from PIL import ImageEnhance
-            
-            # Увеличиваем контраст
             enhancer = ImageEnhance.Contrast(img)
-            img_enhanced = enhancer.enhance(1.5)
-            
-            # Увеличиваем яркость
-            enhancer = ImageEnhance.Brightness(img_enhanced)
-            img_enhanced = enhancer.enhance(1.2)
-            
-            # Увеличиваем резкость
-            enhancer = ImageEnhance.Sharpness(img_enhanced)
-            img_enhanced = enhancer.enhance(1.3)
-            
-            # Пробуем декодировать улучшенное изображение
+            img_enhanced = enhancer.enhance(2.0)
             decoded = decode(img_enhanced)
             
-            # Если все еще не найден, пробуем в градациях серого
             if not decoded:
-                img_gray = img.convert('L')
-                decoded = decode(img_gray)
+                # Попробовать увеличить яркость
+                enhancer = ImageEnhance.Brightness(img)
+                img_bright = enhancer.enhance(1.5)
+                decoded = decode(img_bright)
+                
+                if not decoded:
+                    # Попробовать изменить размер
+                    width, height = img.size
+                    img_resized = img.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
+                    decoded = decode(img_resized)
         
-        # Удаляем сообщение о обработке
+        # Удалить сообщение о обработке
         try:
             await processing_message.delete()
         except Exception:
@@ -926,20 +901,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ QR-код не найден на фото.\n\n"
                 "📸 **Советы для лучшего сканирования:**\n"
                 "• Убедитесь, что QR-код полностью в кадре\n"
+                "• Держите камеру ровно и на достаточном расстоянии\n"
                 "• Обеспечьте хорошее освещение\n"
-                "• Держите камеру ровно и на расстоянии 10-20 см\n"
-                "• Избегайте размытия и бликов\n"
+                "• Избегайте размытия - держите телефон неподвижно\n"
                 "• Попробуйте сфотографировать еще раз"
             )
             return
         
-        # Декодируем данные QR-кода
+        # Получить данные QR-кода
         qr_data = decoded[0].data.decode("utf-8")
         logging.info(f"QR-код успешно декодирован: {qr_data[:50]}...")
         
-        # Проверяем, что это наш QR-код
+        # Проверить, что это наш QR-код
         if qr_data.startswith("/qr_"):
-            # Создаем временные объекты для обработки QR-кода как текстового сообщения
+            # Создать фейковый update для обработки QR-кода
             class FakeUser:
                 def __init__(self, orig):
                     self.id = orig.id
@@ -963,34 +938,42 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 def __init__(self, orig, text):
                     self.message = FakeMessage(orig.message, text)
             
-            # Обрабатываем QR-код как текстовое сообщение
             fake_update = FakeUpdate(update, qr_data)
             await handle_qr(fake_update, context)
-            
         else:
             await update.message.reply_text(
                 "❌ QR-код не содержит ожидаемых данных.\n\n"
                 "Убедитесь, что вы сканируете QR-код с терминала учета времени."
             )
             
-    except UnicodeDecodeError:
-        logging.exception("Ошибка декодирования QR-кода:")
-        await update.message.reply_text(
-            "❌ Ошибка декодирования QR-кода.\n\n"
-            "QR-код поврежден или содержит некорректные данные. Попробуйте сфотографировать еще раз."
-        )
     except Exception as e:
-        logging.exception("Ошибка при обработке фото:")
-        await update.message.reply_text(
-            "❌ Ошибка при обработке фото QR-кода.\n\n"
-            "Попробуйте сфотографировать QR-код еще раз или обратитесь к администратору."
-        )
+        logging.exception("Ошибка при обработке фото QR-кода:")
+        
+        # Удалить сообщение о обработке если оно есть
+        try:
+            if 'processing_message' in locals():
+                await processing_message.delete()
+        except Exception:
+            pass
+        
+        # Отправить детальное сообщение об ошибке
+        error_message = "❌ Ошибка при обработке фото QR-кода.\n\n"
+        
+        if "cannot identify image file" in str(e).lower():
+            error_message += "Файл не является изображением или поврежден."
+        elif "no module named" in str(e).lower():
+            error_message += "Ошибка системы. Сообщите администратору."
+        else:
+            error_message += "Попробуйте сфотографировать QR-код еще раз с лучшим освещением."
+        
+        await update.message.reply_text(error_message)
+        
     finally:
-        # Гарантированно удаляем временный файл
+        # Удалить временный файл
         if photo_path and os.path.exists(photo_path):
             try:
                 os.remove(photo_path)
-                logging.info(f"Временный файл {photo_path} удален")
+                logging.info(f"Временный файл удален: {photo_path}")
             except Exception as e:
                 logging.warning(f"Не удалось удалить временный файл {photo_path}: {e}")
 
@@ -1506,11 +1489,15 @@ if __name__ == "__main__":
                 role_emoji = {"superuser": "👑", "admin": "👨‍💼", "user": "👤"}.get(user.get("role"), "👤")
                 
                 name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-                username = f"@{user.get('username', 'нет')}"
+                username = user.get('username', 'нет')
                 
-                text += f"{status_emoji} {role_emoji} **{name}**\n"
-                text += f"   {username} | ID: {user.get('telegram_id')}\n"
-                text += f"   Статус: {user.get('status')} | Роль: {user.get('role')}\n\n"
+                # Экранируем специальные символы для Markdown
+                name_escaped = name.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+                username_escaped = username.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+                
+                text += f"{status_emoji} {role_emoji} *{name_escaped}*\n"
+                text += f"   @{username_escaped} \\| ID: {user.get('telegram_id')}\n"
+                text += f"   Статус: {user.get('status')} \\| Роль: {user.get('role')}\n\n"
                 
                 # Кнопки действий для каждого пользователя
                 user_buttons = []
@@ -2214,7 +2201,7 @@ if __name__ == "__main__":
                 parse_mode='Markdown'
             )
             
-            # Сбросить состояние
+            # Сбросить состояние.
             context.user_data.pop('waiting_for_bug_report', None)
             
         except Exception as e:
