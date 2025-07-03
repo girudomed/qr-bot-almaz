@@ -44,9 +44,9 @@ RUN apt-get purge -y --auto-remove build-essential && \
 # 4) Исходники под непривилегированного пользователя
 ###############################################################################
 RUN useradd -m -U qrbot && \
-    mkdir -p /tmp/qrbot && \
-    chown qrbot:qrbot /tmp/qrbot && \
-    chmod 755 /tmp/qrbot
+    mkdir -p /app/temp && \
+    chown -R qrbot:qrbot /app && \
+    chmod -R 755 /app
 COPY --chown=qrbot:qrbot . .
 USER qrbot
 

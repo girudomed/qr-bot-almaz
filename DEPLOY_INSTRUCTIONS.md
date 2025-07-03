@@ -36,10 +36,17 @@ docker-compose logs -f bot
 
 ### Ожидаемые логи:
 ```
-bot-1  | INFO Фото скачано: /tmp/temp_qr_abc123.jpg, размер: 45678 байт
+bot-1  | INFO Фото скачано: /app/temp/temp_qr_abc123.jpg, размер: 45678 байт
 bot-1  | INFO Изображение открыто: (800, 600), режим: RGB
 bot-1  | INFO QR-код успешно декодирован: /qr_...
-bot-1  | INFO Временный файл удален: /tmp/temp_qr_abc123.jpg
+bot-1  | INFO Временный файл удален: /app/temp/temp_qr_abc123.jpg
+```
+
+### Тест прав доступа:
+```bash
+# Проверить права в контейнере
+docker-compose exec bot ls -la /app/temp/
+docker-compose exec bot touch /app/temp/test.txt
 ```
 
 ## ❌ Устранение проблем
