@@ -60,26 +60,46 @@ def get_branches():
 
 # Генерация подписи для QR (HMAC-SHA256)
 def generate_signature(branch_id, time_window):
-    msg = f"{branch_id}:{time_window}".encode()
-    secret = QR_SECRET.encode()
-    return hmac.new(secret, msg, hashlib.sha256).hexdigest()
+    """Генерация подписи для QR-кода"""
+    try:
+        msg = f"{branch_id}:{time_window}".encode()
+        secret = QR_SECRET.encode()
+        return hmac.new(secret, msg, hashlib.sha256).hexdigest()
+    except Exception as e:
+        print(f"Ошибка генерации подписи: {e}", flush=True)
+        return None
 
 # Генерация base64-кодированной строки для QR
 def generate_qr_payload(branch_id, branch_name):
-    timestamp = get_moscow_timestamp()
-    time_window = timestamp // 30  # Окно 30 секунд
-    expires = timestamp + 60
-    signature = generate_signature(branch_id, time_window)
-    payload = {
-        "branch_id": branch_id,
-        "branch_name": branch_name,
-        "timestamp": time_window,
-        "expires": expires,
-        "signature": signature,
-    }
-    json_str = json.dumps(payload, ensure_ascii=False)
-    base64_str = base64.urlsafe_b64encode(json_str.encode()).decode()
-    return base64_str
+    """Генерация данных для QR-кода с улучшенной логикой времени"""
+    try:
+        timestamp = get_moscow_timestamp()
+        time_window = timestamp // 30  # Окно 30 секунд
+        expires = timestamp + 120  # Увеличиваем время жизни до 2 минут
+        signature = generate_signature(branch_id, time_window)
+        
+        if not signature:
+            print("Ошибка генерации подписи QR-кода", flush=True)
+            return None
+        
+        payload = {
+            "branch_id": branch_id,
+            "branch_name": branch_name,
+            "timestamp": time_window,
+            "expires": expires,
+            "signature": signature,
+            "generated_at": timestamp  # Добавляем время генерации для отладки
+        }
+        
+        json_str = json.dumps(payload, ensure_ascii=False)
+        base64_str = base64.urlsafe_b64encode(json_str.encode()).decode()
+        
+        print(f"QR-код сгенерирован: branch_id={branch_id}, time_window={time_window}, expires={expires}", flush=True)
+        return base64_str
+        
+    except Exception as e:
+        print(f"Ошибка генерации QR-кода: {e}", flush=True)
+        return None
 
 @app.route("/login", methods=["GET", "POST"])
 def login():

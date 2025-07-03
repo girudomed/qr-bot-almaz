@@ -1,5 +1,6 @@
 #bot.py
 import os
+import sys
 import json
 import base64
 import hmac
@@ -9,11 +10,18 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
-import utils.httpx_proxy_patch
 from supabase import create_client, Client
 from PIL import Image
 from pyzbar.pyzbar import decode
 from pathlib import Path
+
+# Добавляем корневую директорию проекта в sys.path для корректных импортов
+current_dir = Path(__file__).parent
+project_root = current_dir.parent
+sys.path.insert(0, str(project_root))
+
+# Теперь импортируем utils
+import utils.httpx_proxy_patch
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
@@ -44,10 +52,34 @@ if not all([TELEGRAM_TOKEN, QR_SECRET, SUPABASE_URL, SUPABASE_KEY]):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def verify_signature(branch_id, time_window, signature):
-    msg = f"{branch_id}:{time_window}".encode()
-    secret = QR_SECRET.encode()
-    expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(signature, expected)
+    """Проверить подпись QR-кода с улучшенной логикой"""
+    try:
+        msg = f"{branch_id}:{time_window}".encode()
+        secret = QR_SECRET.encode()
+        expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+        
+        # Проверяем точное совпадение
+        if hmac.compare_digest(signature, expected):
+            return True
+        
+        # Дополнительная проверка для соседних временных окон (±30 секунд)
+        # Это помогает при небольших расхождениях времени между сервером и клиентом
+        current_ts = get_moscow_timestamp()
+        current_window = current_ts // 30
+        
+        for offset in [-1, 1]:  # Проверяем предыдущее и следующее окно
+            test_window = current_window + offset
+            test_msg = f"{branch_id}:{test_window}".encode()
+            test_expected = hmac.new(secret, test_msg, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(signature, test_expected):
+                logging.info(f"QR-код принят с временным смещением: {offset * 30} секунд")
+                return True
+        
+        return False
+        
+    except Exception as e:
+        logging.exception("Ошибка проверки подписи QR-кода:")
+        return False
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -821,27 +853,99 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Улучшенная обработка фото с QR-кодами"""
     if not update.message.photo:
         return
-    photo_file = await update.message.photo[-1].get_file()
-    photo_path = "temp_qr.jpg"
-    await photo_file.download_to_drive(photo_path)
+    
+    # Проверка авторизации пользователя
+    user_id = update.message.from_user.id
+    if not await check_user_authorization(user_id):
+        await update.message.reply_text("Вы не авторизованы для работы с системой. Обратитесь к администратору.")
+        return
+    
+    photo_path = None
     try:
+        # Отправляем сообщение о начале обработки
+        processing_message = await update.message.reply_text("🔍 Обрабатываю фото QR-кода...")
+        
+        # Получаем фото наилучшего качества
+        photo_file = await update.message.photo[-1].get_file()
+        
+        # Создаем уникальное имя файла для избежания конфликтов
+        import uuid
+        photo_path = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
+        
+        await photo_file.download_to_drive(photo_path)
+        
+        # Открываем и предварительно обрабатываем изображение
         img = Image.open(photo_path)
+        
+        # Конвертируем в RGB если необходимо
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Попытка декодирования QR-кода с оригинального изображения
         decoded = decode(img)
+        
+        # Если QR-код не найден, пробуем улучшить изображение
         if not decoded:
-            await update.message.reply_text("QR-код не найден на фото.")
+            logging.info("QR-код не найден на оригинальном изображении, пробуем улучшить...")
+            
+            # Увеличиваем контраст и яркость
+            from PIL import ImageEnhance
+            
+            # Увеличиваем контраст
+            enhancer = ImageEnhance.Contrast(img)
+            img_enhanced = enhancer.enhance(1.5)
+            
+            # Увеличиваем яркость
+            enhancer = ImageEnhance.Brightness(img_enhanced)
+            img_enhanced = enhancer.enhance(1.2)
+            
+            # Увеличиваем резкость
+            enhancer = ImageEnhance.Sharpness(img_enhanced)
+            img_enhanced = enhancer.enhance(1.3)
+            
+            # Пробуем декодировать улучшенное изображение
+            decoded = decode(img_enhanced)
+            
+            # Если все еще не найден, пробуем в градациях серого
+            if not decoded:
+                img_gray = img.convert('L')
+                decoded = decode(img_gray)
+        
+        # Удаляем сообщение о обработке
+        try:
+            await processing_message.delete()
+        except Exception:
+            pass
+        
+        if not decoded:
+            await update.message.reply_text(
+                "❌ QR-код не найден на фото.\n\n"
+                "📸 **Советы для лучшего сканирования:**\n"
+                "• Убедитесь, что QR-код полностью в кадре\n"
+                "• Обеспечьте хорошее освещение\n"
+                "• Держите камеру ровно и на расстоянии 10-20 см\n"
+                "• Избегайте размытия и бликов\n"
+                "• Попробуйте сфотографировать еще раз"
+            )
             return
+        
+        # Декодируем данные QR-кода
         qr_data = decoded[0].data.decode("utf-8")
-        # Если QR-код содержит строку /qr_, обрабатываем как текст
+        logging.info(f"QR-код успешно декодирован: {qr_data[:50]}...")
+        
+        # Проверяем, что это наш QR-код
         if qr_data.startswith("/qr_"):
-            # Вместо подмены message создаём временный объект с нужными полями и методом reply_text
+            # Создаем временные объекты для обработки QR-кода как текстового сообщения
             class FakeUser:
                 def __init__(self, orig):
                     self.id = orig.id
                     self.first_name = getattr(orig, "first_name", "")
                     self.last_name = getattr(orig, "last_name", "")
                     self.username = getattr(orig, "username", "")
+            
             class FakeMessage:
                 def __init__(self, orig, text):
                     self.text = text
@@ -849,25 +953,45 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self.chat = orig.chat
                     self.chat_id = orig.chat.id if hasattr(orig.chat, "id") else None
                     self.message_id = orig.message_id
-                    self._orig = orig  # для reply_text
-                async def reply_text(self, text, reply_markup=None):
-                    await self._orig.reply_text(text, reply_markup=reply_markup)
+                    self._orig = orig
+                
+                async def reply_text(self, text, reply_markup=None, parse_mode=None):
+                    await self._orig.reply_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+            
             class FakeUpdate:
                 def __init__(self, orig, text):
                     self.message = FakeMessage(orig.message, text)
+            
+            # Обрабатываем QR-код как текстовое сообщение
             fake_update = FakeUpdate(update, qr_data)
             await handle_qr(fake_update, context)
+            
         else:
-            await update.message.reply_text("QR-код не содержит ожидаемых данных.")
+            await update.message.reply_text(
+                "❌ QR-код не содержит ожидаемых данных.\n\n"
+                "Убедитесь, что вы сканируете QR-код с терминала учета времени."
+            )
+            
+    except UnicodeDecodeError:
+        logging.exception("Ошибка декодирования QR-кода:")
+        await update.message.reply_text(
+            "❌ Ошибка декодирования QR-кода.\n\n"
+            "QR-код поврежден или содержит некорректные данные. Попробуйте сфотографировать еще раз."
+        )
     except Exception as e:
         logging.exception("Ошибка при обработке фото:")
-        await update.message.reply_text("Ошибка при обработке фото QR-кода.")
+        await update.message.reply_text(
+            "❌ Ошибка при обработке фото QR-кода.\n\n"
+            "Попробуйте сфотографировать QR-код еще раз или обратитесь к администратору."
+        )
     finally:
-        try:
-            import os
-            os.remove(photo_path)
-        except Exception:
-            pass
+        # Гарантированно удаляем временный файл
+        if photo_path and os.path.exists(photo_path):
+            try:
+                os.remove(photo_path)
+                logging.info(f"Временный файл {photo_path} удален")
+            except Exception as e:
+                logging.warning(f"Не удалось удалить временный файл {photo_path}: {e}")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
