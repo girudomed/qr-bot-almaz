@@ -102,8 +102,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from telegram import ReplyKeyboardMarkup, KeyboardButton
         keyboard = ReplyKeyboardMarkup([
             ["📊 Моя статистика", "📋 Меню"],
-            ["👑 Админ-панель", "🐾 Мой тамагочи"],
-            ["❓ Помощь"]
+            ["👑 Админ-панель", "❓ Помощь"]
         ], resize_keyboard=True)
         await update.message.reply_text(
             "Вы авторизованы как суперпользователь.",
@@ -116,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from telegram import ReplyKeyboardMarkup, KeyboardButton
         keyboard = ReplyKeyboardMarkup([
             ["📊 Моя статистика", "📋 Меню"],
-            ["🐾 Мой тамагочи", "❓ Помощь"]
+            ["❓ Помощь"]
         ], resize_keyboard=True)
         await update.message.reply_text(
             "Вы авторизованы. Можете сканировать QR-коды или использовать меню.",
@@ -680,19 +679,6 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "👑 Админ-панель":
         await handle_admin_panel(update, context)
         return
-    elif text == "🐾 Мой тамагочи":
-        # Показать статус тамагочи
-        tamagotchi_status = await get_tamagotchi_status(user_id)
-        tamagotchi = await update_tamagotchi_stats(user_id)
-        
-        if tamagotchi and not tamagotchi["is_alive"]:
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("💊 Воскресить тамагочи", callback_data="revive_tamagotchi")]
-            ])
-            await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", reply_markup=keyboard, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(f"🐾 **Мой тамагочи:**\n\n{tamagotchi_status}", parse_mode='Markdown')
-        return
 
     # Проверка на ожидание сообщения разработчику
     if context.user_data.get('waiting_for_developer_message'):
@@ -771,33 +757,33 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     last_event_type = await get_last_event_type(user_id)
     
     if last_event_type is None:
-# Первое событие - только приход
+        # Первое событие - только приход
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("😞", callback_data="event_arrival_1"),
-                InlineKeyboardButton("😕", callback_data="event_arrival_2"),
-                InlineKeyboardButton("😐", callback_data="event_arrival_3"),
-                InlineKeyboardButton("🙂", callback_data="event_arrival_4"),
-                InlineKeyboardButton("😃", callback_data="event_arrival_5"),
+                InlineKeyboardButton("✅ Подтвердить приход", callback_data="event_arrival_confirm"),
+                InlineKeyboardButton("❌ Отклонить", callback_data="event_arrival_cancel")
             ]
         ])
         await update.message.reply_text(
-            f"Привет, как настроение сегодня?\nQR-код филиала '{branch_name}' успешно отсканирован.",
+            f"📍 QR-код филиала '{branch_name}' успешно отсканирован.\n\n"
+            f"🟢 **Отметить приход?**\n"
+            f"Филиал: {branch_name}\n"
+            f"Время: {get_moscow_time().strftime('%H:%M:%S')}",
             reply_markup=keyboard
         )
     elif last_event_type == "departure":
-# Последнее событие - уход, значит следующее - приход
+        # Последнее событие - уход, значит следующее - приход
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("😞", callback_data="event_arrival_1"),
-                InlineKeyboardButton("😕", callback_data="event_arrival_2"),
-                InlineKeyboardButton("😐", callback_data="event_arrival_3"),
-                InlineKeyboardButton("🙂", callback_data="event_arrival_4"),
-                InlineKeyboardButton("😃", callback_data="event_arrival_5"),
+                InlineKeyboardButton("✅ Подтвердить приход", callback_data="event_arrival_confirm"),
+                InlineKeyboardButton("❌ Отклонить", callback_data="event_arrival_cancel")
             ]
         ])
         await update.message.reply_text(
-            f"Привет, как настроение сегодня?\nQR-код филиала '{branch_name}' успешно отсканирован.",
+            f"📍 QR-код филиала '{branch_name}' успешно отсканирован.\n\n"
+            f"🟢 **Отметить приход?**\n"
+            f"Филиал: {branch_name}\n"
+            f"Время: {get_moscow_time().strftime('%H:%M:%S')}",
             reply_markup=keyboard
         )
     elif last_event_type == "arrival":
@@ -816,15 +802,15 @@ async def handle_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("😞", callback_data="event_departure_1"),
-                InlineKeyboardButton("😕", callback_data="event_departure_2"),
-                InlineKeyboardButton("😐", callback_data="event_departure_3"),
-                InlineKeyboardButton("🙂", callback_data="event_departure_4"),
-                InlineKeyboardButton("😃", callback_data="event_departure_5"),
+                InlineKeyboardButton("✅ Подтвердить уход", callback_data="event_departure_confirm"),
+                InlineKeyboardButton("❌ Отклонить", callback_data="event_departure_cancel")
             ]
         ])
         await update.message.reply_text(
-            f"Как прошел рабочий день, как твое настроение сейчас?\nQR-код филиала '{branch_name}' успешно отсканирован.",
+            f"📍 QR-код филиала '{branch_name}' успешно отсканирован.\n\n"
+            f"🔴 **Отметить уход?**\n"
+            f"Филиал: {branch_name}\n"
+            f"Время: {get_moscow_time().strftime('%H:%M:%S')}",
             reply_markup=keyboard
         )
 
@@ -850,7 +836,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Создать уникальное имя файла для избежания конфликтов
         import uuid
-        photo_path = f"/tmp/temp_qr_{uuid.uuid4().hex[:8]}.jpg"
+        photo_path = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
         
         # Скачать фото
         await photo_file.download_to_drive(photo_path)
@@ -1115,22 +1101,30 @@ if __name__ == "__main__":
             await query.edit_message_text(report)
             return
 
-# Обработка событий прихода/ухода
+        # Обработка событий прихода/ухода
         if data.startswith("event_"):
             parts = data.split("_")
             event_type = parts[1]  # arrival или departure
-            mood = int(parts[2]) if len(parts) > 2 else 3  # 1-5, по умолчанию нейтраль
+            action = parts[2]  # confirm или cancel
             
             # Получить сохраненные данные QR
             pending_qr = context.user_data.get('pending_qr')
             if not pending_qr:
                 await query.edit_message_text("Ошибка: данные QR-кода не найдены. Отсканируйте код заново.")
                 return
-
-# Подготовить данные события
-            event_data = pending_qr.copy()
-            event_data["event_type"] = event_type
-            event_data["mood"] = mood
+            
+            # Если пользователь отклонил действие
+            if action == "cancel":
+                await query.edit_message_text("❌ Действие отменено. QR-код не обработан.")
+                context.user_data.pop('pending_qr', None)
+                return
+            
+            # Если пользователь подтвердил действие
+            if action == "confirm":
+                # Подготовить данные события
+                event_data = pending_qr.copy()
+                event_data["event_type"] = event_type
+                event_data["mood"] = 3  # Нейтральное настроение по умолчанию
             
             # Если это уход, рассчитать рабочие часы
             work_hours = None
@@ -1161,35 +1155,14 @@ if __name__ == "__main__":
             try:
                 res = supabase.table("time_events").insert(event_data).execute()
                 if res.data:
-                    # Покормить тамагочи
-                    tamagotchi, tamagotchi_message = await feed_tamagotchi(user_id)
-                    
-                    # Если тамагочи был мертв, воскресить его
-                    if tamagotchi and not tamagotchi["is_alive"]:
-                        tamagotchi_message = await revive_tamagotchi(user_id)
-                        tamagotchi = await get_or_create_tamagotchi(user_id)
-                    
-                    # Получить случайный комплимент из базы
-                    compliment = "Отличная работа! 👍"
-                    try:
-                        compliment_res = supabase.table("compliments").select("text").execute()
-                        if compliment_res.data:
-                            import random
-                            compliment = random.choice(compliment_res.data)["text"]
-                    except Exception as e:
-                        logging.exception("Ошибка получения комплимента:")
-                    
-                    # Получить статус тамагочи
-                    tamagotchi_status = await get_tamagotchi_status(user_id)
-                    
                     if event_type == "arrival":
-                        message = f"✅ Приход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК\n\n🐾 **Тамагочи:**\n{tamagotchi_message}\n\n{tamagotchi_status}\n\n{compliment}"
+                        message = f"✅ **Приход зафиксирован!**\n\n📍 Филиал: {pending_qr['branch_name']}\n🕐 Время: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК\n\n✨ Хорошего рабочего дня!"
                     else:
                         # Получить прогноз погоды для ухода
                         weather_forecast = await get_weather_forecast()
                         
-                        hours_text = f"\nОтработано часов: {work_hours}" if work_hours else ""
-                        message = f"✅ Уход зафиксирован!\nФилиал: {pending_qr['branch_name']}\nВремя: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК{work_duration_text}{hours_text}\n\n🐾 **Тамагочи:**\n{tamagotchi_message}\n\n{tamagotchi_status}\n\n{weather_forecast}\n\n{compliment}"
+                        hours_text = f"\n⏱ Отработано часов: {work_hours}" if work_hours else ""
+                        message = f"✅ **Уход зафиксирован!**\n\n📍 Филиал: {pending_qr['branch_name']}\n🕐 Время: {datetime.fromisoformat(pending_qr['event_time']):%d.%m.%Y %H:%M:%S} МСК{work_duration_text}{hours_text}\n\n{weather_forecast}\n\n🌟 Отличной работы! До свидания!"
                     
                     await query.edit_message_text(message, parse_mode='Markdown')
                     # Очистить сохраненные данные
@@ -1252,12 +1225,6 @@ if __name__ == "__main__":
                 await decline_user(query, context, user_id)
             return
 
-        # Обработка воскрешения тамагочи
-        if data == "revive_tamagotchi":
-            message = await revive_tamagotchi(user_id)
-            tamagotchi_status = await get_tamagotchi_status(user_id)
-            await query.edit_message_text(f"🐾 **Мой тамагочи:**\n\n{message}\n\n{tamagotchi_status}", parse_mode='Markdown')
-            return
 
         # Обработка связи с разработчиком и сообщений об ошибках
         if data == "contact_developer":
