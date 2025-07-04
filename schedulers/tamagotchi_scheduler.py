@@ -17,6 +17,68 @@ def get_moscow_time():
     """Получить текущее время в Москве"""
     return datetime.now(MOSCOW_TZ)
 
+def is_working_hours():
+    """Проверить, рабочее ли время (9:00-18:00 по Москве)"""
+    moscow_time = get_moscow_time()
+    hour = moscow_time.hour
+    # Рабочие часы: с 9:00 до 18:00
+    return 9 <= hour <= 18
+
+def should_send_notification(telegram_id, notification_type, last_notification_time=None):
+    """Определить, нужно ли отправлять уведомление"""
+    now = get_moscow_time().replace(tzinfo=None)
+    
+    # Критические уведомления отправляем только в рабочие часы
+    if notification_type == "critical":
+        if not is_working_hours():
+            return False
+        # Критические уведомления не чаще раза в 4 часа
+        if last_notification_time:
+            hours_since_last = (now - last_notification_time).total_seconds() / 3600
+            return hours_since_last >= 4
+        return True
+    
+    # Уведомления о смерти отправляем всегда, но не чаще раза в день
+    elif notification_type == "death":
+        if last_notification_time:
+            hours_since_last = (now - last_notification_time).total_seconds() / 3600
+            return hours_since_last >= 24
+        return True
+    
+    # Обычные уведомления о голоде только в рабочие часы и не чаще раза в 6 часов
+    elif notification_type == "hungry":
+        if not is_working_hours():
+            return False
+        if last_notification_time:
+            hours_since_last = (now - last_notification_time).total_seconds() / 3600
+            return hours_since_last >= 6
+        return True
+    
+    return False
+
+async def get_last_notification(telegram_id, notification_type):
+    """Получить время последнего уведомления"""
+    try:
+        result = supabase.table("tamagotchi_notifications").select("sent_at").eq("telegram_id", telegram_id).eq("notification_type", notification_type).order("sent_at", desc=True).limit(1).execute()
+        if result.data:
+            return datetime.fromisoformat(result.data[0]["sent_at"])
+        return None
+    except Exception as e:
+        logging.warning(f"Ошибка получения последнего уведомления: {e}")
+        return None
+
+async def save_notification(telegram_id, notification_type):
+    """Сохранить информацию об отправленном уведомлении"""
+    try:
+        now = get_moscow_time().replace(tzinfo=None)
+        supabase.table("tamagotchi_notifications").insert({
+            "telegram_id": telegram_id,
+            "notification_type": notification_type,
+            "sent_at": now.isoformat()
+        }).execute()
+    except Exception as e:
+        logging.warning(f"Ошибка сохранения уведомления: {e}")
+
 if Path('.env').is_file():
     load_dotenv()      # локальная разработка
 
@@ -98,19 +160,24 @@ async def check_hungry_tamagotchis():
                 
                 # Отправить уведомления в зависимости от состояния
                 if not is_alive:
-                    # Тамагочи умер
-                    message = await get_tamagotchi_message("dead")
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=f"💀 **Ваш тамагочи умер!**\n\n{message}\n\nВы не сканировали QR-коды более 3 дней. Воскресите его следующим сканированием!",
-                        parse_mode='Markdown'
-                    )
-                    logging.info(f"Отправлено уведомление о смерти тамагочи пользователю {tamagotchi['telegram_id']}")
+                    # Тамагочи умер - проверяем, нужно ли отправлять уведомление
+                    last_death_notification = await get_last_notification(tamagotchi["telegram_id"], "death")
+                    if should_send_notification(tamagotchi["telegram_id"], "death", last_death_notification):
+                        message = await get_tamagotchi_message("dead")
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"💀 **Ваш тамагочи умер!**\n\n{message}\n\nВы не сканировали QR-коды более 3 дней. Воскресите его следующим сканированием!",
+                            parse_mode='Markdown'
+                        )
+                        await save_notification(tamagotchi["telegram_id"], "death")
+                        logging.info(f"Отправлено уведомление о смерти тамагочи пользователю {tamagotchi['telegram_id']}")
                     
                 elif hunger < 20 or happiness < 20 or health < 20:
-                    # Тамагочи очень голоден/болен
-                    message = await get_tamagotchi_message("sick")
-                    status_text = f"""
+                    # Тамагочи очень голоден/болен - критическое состояние
+                    last_critical_notification = await get_last_notification(tamagotchi["telegram_id"], "critical")
+                    if should_send_notification(tamagotchi["telegram_id"], "critical", last_critical_notification):
+                        message = await get_tamagotchi_message("sick")
+                        status_text = f"""
 😰 **{tamagotchi['name']}** (Уровень {tamagotchi['level']}) - КРИТИЧЕСКОЕ СОСТОЯНИЕ!
 🍎 Сытость: {hunger}/100
 😊 Счастье: {happiness}/100
@@ -119,19 +186,22 @@ async def check_hungry_tamagotchis():
 {message}
 
 ⚠️ Срочно отсканируйте QR-код на работе, иначе тамагочи умрет!
-                    """.strip()
-                    
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=status_text,
-                        parse_mode='Markdown'
-                    )
-                    logging.info(f"Отправлено критическое уведомление пользователю {tamagotchi['telegram_id']}")
+                        """.strip()
+                        
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=status_text,
+                            parse_mode='Markdown'
+                        )
+                        await save_notification(tamagotchi["telegram_id"], "critical")
+                        logging.info(f"Отправлено критическое уведомление пользователю {tamagotchi['telegram_id']}")
                     
                 elif hunger < 50 or happiness < 50 or health < 50:
-                    # Тамагочи голоден
-                    message = await get_tamagotchi_message("hungry")
-                    status_text = f"""
+                    # Тамагочи голоден - обычное уведомление
+                    last_hungry_notification = await get_last_notification(tamagotchi["telegram_id"], "hungry")
+                    if should_send_notification(tamagotchi["telegram_id"], "hungry", last_hungry_notification):
+                        message = await get_tamagotchi_message("hungry")
+                        status_text = f"""
 😔 **{tamagotchi['name']}** (Уровень {tamagotchi['level']}) - голоден
 🍎 Сытость: {hunger}/100
 😊 Счастье: {happiness}/100
@@ -140,15 +210,14 @@ async def check_hungry_tamagotchis():
 {message}
 
 Не забывайте сканировать QR-коды на работе!
-                    """.strip()
-                    
-                    # Отправляем уведомления о голоде только раз в 6 часов
-                    if hours_since_fed > 6 and int(hours_since_fed) % 6 == 0:
+                        """.strip()
+                        
                         await bot.send_message(
                             chat_id=chat_id,
                             text=status_text,
                             parse_mode='Markdown'
                         )
+                        await save_notification(tamagotchi["telegram_id"], "hungry")
                         logging.info(f"Отправлено уведомление о голоде пользователю {tamagotchi['telegram_id']}")
                 
             except Exception as e:
