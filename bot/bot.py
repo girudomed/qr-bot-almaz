@@ -52,10 +52,18 @@ if not all([TELEGRAM_TOKEN, QR_SECRET, SUPABASE_URL, SUPABASE_KEY]):
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def verify_signature(branch_id, time_window, signature):
-    msg = f"{branch_id}:{time_window}".encode()
-    secret = QR_SECRET.encode()
-    expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(signature, expected)
+    if not QR_SECRET:
+        logging.error("QR_SECRET не установлен")
+        return False
+    
+    try:
+        msg = f"{branch_id}:{time_window}".encode()
+        secret = QR_SECRET.encode()
+        expected = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
+    except Exception as e:
+        logging.exception("Ошибка проверки подписи QR-кода:")
+        return False
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -406,9 +414,19 @@ async def check_user_authorization(user_id):
     """Проверить авторизацию пользователя"""
     try:
         user_query = supabase.table("users").select("*").eq("telegram_id", user_id).execute()
-        user_data = user_query.data[0] if user_query.data and len(user_query.data) > 0 else None
-        return user_data and user_data.get("status") == "approved"
-    except Exception:
+        if not user_query.data:
+            logging.info(f"Пользователь {user_id} не найден в базе данных")
+            return False
+        
+        user_data = user_query.data[0]
+        is_authorized = user_data.get("status") == "approved"
+        logging.info(f"Проверка авторизации пользователя {user_id}: статус={user_data.get('status')}, авторизован={is_authorized}")
+        return is_authorized
+        
+    except Exception as e:
+        logging.exception(f"Ошибка проверки авторизации пользователя {user_id}: {e}")
+        # В случае ошибки базы данных, не блокируем пользователя полностью
+        # Возвращаем False, но логируем ошибку для отладки
         return False
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -836,9 +854,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Создать уникальное имя файла для избежания конфликтов
         import uuid
+        import tempfile
         
-        # Использовать папку /app/temp с правильными правами доступа
-        temp_dir = "/app/temp"
+        # Использовать системную временную папку для избежания проблем с правами доступа
+        temp_dir = tempfile.gettempdir()
         photo_filename = f"temp_qr_{uuid.uuid4().hex[:8]}.jpg"
         photo_path = os.path.join(temp_dir, photo_filename)
         
