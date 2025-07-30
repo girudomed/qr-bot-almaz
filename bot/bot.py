@@ -7,7 +7,6 @@ import hmac
 import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 from supabase import create_client, Client
@@ -33,8 +32,6 @@ def get_moscow_time():
 def get_moscow_timestamp():
     """Получить timestamp московского времени"""
     return int(get_moscow_time().timestamp())
-
-load_dotenv()
 
 # Настройки логирования
 logging.basicConfig(
