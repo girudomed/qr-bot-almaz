@@ -344,16 +344,22 @@ async def handle_registration_confirmation(query, context):
         ])
         
         if admin_chat_id and admin_chat_id != 0:
+            # Экранируем специальные символы для Markdown в уведомлении админу
+            full_name_escaped = reg_data['full_name'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+            birth_date_escaped = reg_data['birth_date'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+            phone_escaped = reg_data['phone'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+            username_escaped = reg_data['username'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+            
             await context.bot.send_message(
                 chat_id=admin_chat_id,
-                text=f"""📋 **Новая заявка на регистрацию:**
+                text=f"""📋 *Новая заявка на регистрацию:*
 
-👤 **ФИО:** {reg_data['full_name']}
-📅 **Дата рождения:** {reg_data['birth_date']}
-📱 **Телефон:** {reg_data['phone']}
-🆔 **Username:** @{reg_data['username']}
-📝 **Telegram ID:** {reg_data['telegram_id']}
-💬 **Chat ID:** {reg_data['chat_id']}""",
+👤 *ФИО:* {full_name_escaped}
+📅 *Дата рождения:* {birth_date_escaped}
+📱 *Телефон:* {phone_escaped}
+🆔 *Username:* @{username_escaped}
+📝 *Telegram ID:* {reg_data['telegram_id']}
+💬 *Chat ID:* {reg_data['chat_id']}""",
                 reply_markup=keyboard,
                 parse_mode='Markdown'
             )
