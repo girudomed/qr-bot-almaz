@@ -380,8 +380,31 @@ async def handle_registration_confirmation(query, context):
 async def handle_registration_restart(query, context):
     """Обработка перезапуска регистрации"""
     try:
-        # Очистить данные и начать заново
-        context.user_data.pop('registration_data', None)
+        # Сохранить базовые данные пользователя
+        user = query.from_user
+        user_id = user.id
+        first_name = getattr(user, "first_name", "")
+        last_name = getattr(user, "last_name", "")
+        username = getattr(user, "username", "")
+        chat_id = query.message.chat.id
+        
+        # Получить номер телефона из старых данных регистрации
+        old_reg_data = context.user_data.get('registration_data', {})
+        phone = old_reg_data.get('phone', '')
+        
+        # Пересоздать структуру данных регистрации с базовой информацией
+        context.user_data['registration_data'] = {
+            "telegram_id": user_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "username": username,
+            "phone": phone,
+            "chat_id": chat_id,
+            "status": "pending",
+            "role": "user"
+        }
+        
+        # Установить состояние ожидания ФИО
         context.user_data['waiting_for_full_name'] = True
         
         await query.edit_message_text(
