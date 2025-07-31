@@ -284,13 +284,20 @@ async def handle_birth_date_input(update: Update, context: ContextTypes.DEFAULT_
         
         # Показать данные для подтверждения
         reg_data = context.user_data['registration_data']
+        
+        # Экранируем специальные символы для Markdown
+        full_name_escaped = reg_data['full_name'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+        phone_escaped = reg_data['phone'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+        username_escaped = reg_data['username'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+        date_escaped = text.strip().replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+        
         confirmation_text = f"""
-✅ **Проверьте введенные данные:**
+✅ *Проверьте введенные данные:*
 
-👤 **ФИО:** {reg_data['full_name']}
-📅 **Дата рождения:** {text.strip()}
-📱 **Телефон:** {reg_data['phone']}
-🆔 **Username:** @{reg_data['username']}
+👤 *ФИО:* {full_name_escaped}
+📅 *Дата рождения:* {date_escaped}
+📱 *Телефон:* {phone_escaped}
+🆔 *Username:* @{username_escaped}
 
 Все данные указаны верно?
         """
