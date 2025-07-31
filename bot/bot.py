@@ -7,6 +7,7 @@ import hmac
 import hashlib
 import logging
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 from supabase import create_client, Client
@@ -21,6 +22,9 @@ sys.path.insert(0, str(project_root))
 
 # Теперь импортируем utils
 import utils.httpx_proxy_patch
+
+# Загрузка переменных окружения
+load_dotenv()
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))
