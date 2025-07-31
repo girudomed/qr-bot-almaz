@@ -23,8 +23,11 @@ sys.path.insert(0, str(project_root))
 # Теперь импортируем utils
 import utils.httpx_proxy_patch
 
-# Загрузка переменных окружения
-load_dotenv()
+# Загрузка переменных окружения (только если файл .env доступен)
+try:
+    load_dotenv()
+except (PermissionError, FileNotFoundError) as e:
+    logging.info(f"Не удалось загрузить .env файл: {e}. Используем переменные окружения из Docker.")
 
 # Московское время (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))

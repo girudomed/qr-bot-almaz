@@ -41,6 +41,13 @@ services:
   bot:
     <<: *qr_image
     command: python -u bot/bot.py
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - QR_SECRET=${QR_SECRET}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     volumes:
       - ./:/app 
     healthcheck:
