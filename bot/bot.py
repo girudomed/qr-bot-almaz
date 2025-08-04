@@ -199,6 +199,15 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_full_name_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     """Обработка ввода ФИО"""
     try:
+        # Проверка наличия данных регистрации
+        if 'registration_data' not in context.user_data:
+            await update.message.reply_text(
+                "❌ Данные регистрации не найдены. Начните регистрацию заново с команды /start"
+            )
+            # Очистить состояние
+            context.user_data.pop('waiting_for_full_name', None)
+            return
+        
         # Проверка формата ФИО (минимум 2 слова)
         name_parts = text.strip().split()
         if len(name_parts) < 2:
@@ -231,7 +240,11 @@ async def handle_full_name_input(update: Update, context: ContextTypes.DEFAULT_T
         
     except Exception as e:
         logging.exception("Ошибка обработки ФИО:")
-        await update.message.reply_text("❌ Ошибка обработки данных. Попробуйте еще раз.")
+        # Очистить состояние при ошибке
+        context.user_data.pop('waiting_for_full_name', None)
+        await update.message.reply_text(
+            "❌ Ошибка обработки данных. Начните регистрацию заново с команды /start"
+        )
 
 async def handle_birth_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     """Обработка ввода даты рождения"""
