@@ -352,11 +352,24 @@ async def handle_registration_confirmation(query, context):
     try:
         reg_data = context.user_data.get('registration_data')
         if not reg_data:
-            await query.edit_message_text("❌ Данные регистрации не найдены. Начните регистрацию заново.")
+            await query.edit_message_text("❌ Данные регистрации не найдены. Начните регистрацию заново с команды /start")
+            return
+        
+        # Проверить, не существует ли уже пользователь с таким telegram_id
+        existing_user = supabase.table("users").select("*").eq("telegram_id", reg_data['telegram_id']).execute()
+        if existing_user.data:
+            await query.edit_message_text("❌ Пользователь с таким ID уже зарегистрирован. Ожидайте подтверждения администратора.")
+            context.user_data.pop('registration_data', None)
             return
         
         # Сохранить пользователя в базу данных
-        supabase.table("users").insert(reg_data).execute()
+        try:
+            supabase.table("users").insert(reg_data).execute()
+        except Exception as db_error:
+            logging.exception("Ошибка вставки пользователя в базу данных:")
+            await query.edit_message_text("❌ Ошибка сохранения данных в базе. Попробуйте зарегистрироваться заново с команды /start")
+            context.user_data.pop('registration_data', None)
+            return
         
         # Найти chat_id админа (по username)
         admin_query = supabase.table("users").select("*").eq("username", ADMIN_USERNAME).execute()
