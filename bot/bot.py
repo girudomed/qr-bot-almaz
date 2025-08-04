@@ -285,11 +285,26 @@ async def handle_birth_date_input(update: Update, context: ContextTypes.DEFAULT_
         # Показать данные для подтверждения
         reg_data = context.user_data['registration_data']
         
-        # Экранируем специальные символы для Markdown
-        full_name_escaped = reg_data['full_name'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-        phone_escaped = reg_data['phone'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-        username_escaped = reg_data['username'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-        date_escaped = text.strip().replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+        # Функция для безопасного экранирования текста для Markdown (без точек для дат)
+        def escape_markdown_text(text, is_date=False):
+            """Экранирует специальные символы Markdown, исключая точки для дат"""
+            if not text:
+                return ""
+            
+            # Базовые символы для экранирования
+            escaped = text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('!', '\\!')
+            
+            # Экранируем точки только если это НЕ дата
+            if not is_date:
+                escaped = escaped.replace('.', '\\.')
+            
+            return escaped
+        
+        # Экранируем данные с учетом типа
+        full_name_escaped = escape_markdown_text(reg_data['full_name'])
+        phone_escaped = escape_markdown_text(reg_data['phone'])
+        username_escaped = escape_markdown_text(reg_data['username'])
+        date_escaped = escape_markdown_text(text.strip(), is_date=True)  # НЕ экранируем точки в дате
         
         confirmation_text = f"""
 ✅ *Проверьте введенные данные:*
@@ -344,11 +359,36 @@ async def handle_registration_confirmation(query, context):
         ])
         
         if admin_chat_id and admin_chat_id != 0:
-            # Экранируем специальные символы для Markdown в уведомлении админу
-            full_name_escaped = reg_data['full_name'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-            birth_date_escaped = reg_data['birth_date'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-            phone_escaped = reg_data['phone'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
-            username_escaped = reg_data['username'].replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')
+            # Функция для безопасного экранирования текста для Markdown (без точек для дат)
+            def escape_markdown_admin(text, is_date=False):
+                """Экранирует специальные символы Markdown, исключая точки для дат"""
+                if not text:
+                    return ""
+                
+                # Базовые символы для экранирования
+                escaped = text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('!', '\\!')
+                
+                # Экранируем точки только если это НЕ дата
+                if not is_date:
+                    escaped = escaped.replace('.', '\\.')
+                
+                return escaped
+            
+            # Конвертировать дату из ISO формата в пользовательский формат
+            try:
+                from datetime import date
+                birth_date_iso = reg_data['birth_date']  # Формат: "2000-11-02"
+                birth_date_obj = date.fromisoformat(birth_date_iso)
+                birth_date_display = birth_date_obj.strftime('%d.%m.%Y')  # Формат: "02.11.2000"
+            except Exception as e:
+                logging.exception("Ошибка конвертации даты:")
+                birth_date_display = reg_data['birth_date']  # Fallback к исходному формату
+            
+            # Экранируем данные с учетом типа
+            full_name_escaped = escape_markdown_admin(reg_data['full_name'])
+            birth_date_escaped = escape_markdown_admin(birth_date_display, is_date=True)  # НЕ экранируем точки в дате
+            phone_escaped = escape_markdown_admin(reg_data['phone'])
+            username_escaped = escape_markdown_admin(reg_data['username'])
             
             await context.bot.send_message(
                 chat_id=admin_chat_id,
