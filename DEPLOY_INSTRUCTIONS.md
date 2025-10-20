@@ -12,7 +12,7 @@ docker-compose down
 docker-compose build --no-cache
 ```
 
-### 3. Запустить обновленные контейнеры
+### 3. Запустить обновленные контейнеры.
 ```bash
 docker-compose up -d
 ```
